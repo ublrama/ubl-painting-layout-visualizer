@@ -1,27 +1,24 @@
 import Papa from 'papaparse';
+import { Painting } from '../types';
 
 /**
  * Parse a semicolon-delimited CSV string/file and return an array of painting objects.
- * Each object has: { signatuur, width, height }
- *
- * @param {string|File} input - CSV text or a File object
- * @returns {Promise<Array<{signatuur: string, width: number, height: number}>>}
  */
-export function parseCsv(input) {
+export function parseCsv(input: string | File): Promise<Painting[]> {
   return new Promise((resolve, reject) => {
-    const config = {
+    const config: Papa.ParseConfig = {
       delimiter: ';',
       header: true,
       skipEmptyLines: true,
       complete(results) {
-        const paintings = [];
-        for (const row of results.data) {
+        const paintings: Painting[] = [];
+        for (const row of results.data as Record<string, string>[]) {
           const signatuur = (row['signatuur'] || '').trim();
           const afmetingen = (row['afmetingen'] || '').trim();
           if (!signatuur || !afmetingen) continue;
 
           const match = afmetingen.match(
-            /(\d+(?:[,\.]\d+)?)\s*cm\s*x\s*(\d+(?:[,\.]\d+)?)\s*cm/i
+            /(\d+(?:[,.]\d+)?)\s*cm\s*x\s*(\d+(?:[,.]\d+)?)\s*cm/i,
           );
           if (!match) continue;
 
@@ -33,11 +30,12 @@ export function parseCsv(input) {
         }
         resolve(paintings);
       },
-      error(err) {
-        reject(err);
-      },
     };
 
-    Papa.parse(input, config);
+    try {
+      Papa.parse(input as string, config);
+    } catch (err) {
+      reject(err);
+    }
   });
 }

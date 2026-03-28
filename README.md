@@ -1,41 +1,109 @@
-# Schilderijen Layout Visualizer
+# Schilderijen Planner 🏛️
 
-A React (Vite) application that reads painting data from a semicolon-delimited CSV file and visualises an optimised 2D bin-packing layout of paintings across multiple walls.
+A **museum dashboard** for visualizing optimal painting layouts across walls. Built with **React + TypeScript + Tailwind CSS**, powered by Vite.
 
-## Features
-
-- Upload your own CSV file (columns: `signatuur`, `afmetingen`)
-- Automatic shelf bin-packing across walls of 375 cm × 240 cm
-- Color-coded paintings per collection (BWB, AHM, Bild. Mus. Geerts, Icones)
-- Wall pagination navigator
-- Summary panel (walls used, paintings per wall)
-- Zoom slider (1–4 px/cm)
-- Hover tooltips with signatuur, dimensions, and position
+![Dashboard view](https://github.com/user-attachments/assets/87e89980-b88d-4c39-b24f-a22bf66063f2)
 
 ---
 
-## Local Development with Podman / Docker
+## Features
+
+- 📊 **Dashboard overview** — all walls as interactive cards in a responsive grid
+- 🖼️ **Wall detail view** — full-scale view with signatuur labels and hover tooltips
+- 📄 **Print support** — print any wall with its painting list legend
+- 📂 **CSV upload** — upload your own semicolon-delimited painting dataset
+- 🔍 **Zoom control** — adjust scale (px/cm) in the detail view
+- 🎨 **Collection color coding** — BWB, AHM, Bild. Mus. Geerts, Icones
+
+---
+
+## Stack
+
+| Tool | Purpose |
+|---|---|
+| React 18 | UI framework |
+| TypeScript | Type safety |
+| Tailwind CSS v3 | Styling |
+| Vite | Build tool |
+| PapaParse | CSV parsing |
+
+---
+
+## CSV Format
+
+The app expects a **semicolon-delimited** CSV file with these columns:
+
+```
+signatuur;afmetingen
+BWB 853;61cm x 61,5cm
+AHM-2011-139/1;135cm x 200cm
+```
+
+- `signatuur` — painting identifier
+- `afmetingen` — dimensions in the format `{width}cm x {height}cm` (Dutch decimal notation with commas is supported)
+
+A demo dataset (`public/demo.csv`) with 137 paintings is loaded automatically on startup.
+
+---
+
+## Wall Layout Algorithm
+
+Paintings are placed using a **shelf bin-packing algorithm**:
+
+- Sort paintings by height (tallest first)
+- Place on shelves of 375 cm wide × 240 cm tall walls
+- 5 cm padding around every painting
+- Open a new wall when the current one is full
+
+---
+
+## Local Development
 
 ### Prerequisites
 
-- [Podman](https://podman.io/) or [Docker](https://www.docker.com/) with Compose support
-- `podman-compose` or `docker compose` CLI
+- Node.js 20+
+- npm
 
-### Start the development server
+### Run
+
+```bash
+npm install
+npm run dev
+# App available at http://localhost:5173
+```
+
+### Build
+
+```bash
+npm run build
+npm run preview
+```
+
+### Type check
+
+```bash
+npm run typecheck
+```
+
+---
+
+## Docker / Podman
+
+The project includes a multi-stage `Dockerfile` and `compose.yaml`.
+
+### Development (with live reload)
 
 ```bash
 podman-compose up painting-layout-dev
+# App available at http://localhost:5173
 ```
 
-The app is available at **http://localhost:5173** with live reload.
-
-### Build and run the production image
+### Production (nginx, port 8080)
 
 ```bash
 podman-compose --profile prod up painting-layout-prod
+# App available at http://localhost:8080
 ```
-
-The production build is served by nginx at **http://localhost:8080**.
 
 ### Rebuild after dependency changes
 
@@ -45,34 +113,51 @@ podman-compose build --no-cache
 
 ---
 
-## Vercel Deployment (free)
+## Deploy to Vercel (free)
 
-1. Push this repository to GitHub.
-2. Go to [vercel.com](https://vercel.com) and sign up / log in with GitHub.
-3. Click **Add New Project** and import your repository.
-4. Vercel auto-detects Vite — click **Deploy**.
-5. Every `git push` to `main` triggers an automatic re-deployment.
-
----
-
-## Using the App
-
-1. Open the app in your browser.
-2. The demo dataset (`public/demo.csv`) loads automatically on startup.
-3. To use your own data, click **"CSV-bestand uploaden"** and select a semicolon-delimited CSV with columns `signatuur` and `afmetingen` (e.g. `87cm x 66cm`).
-4. Navigate between walls using the **← Vorige / Volgende →** buttons.
-5. Adjust the zoom level with the **Zoom** slider.
-6. Hover over any painting rectangle to see its signatuur, dimensions, and position on the wall.
+1. Push to a GitHub repository
+2. Go to [vercel.com](https://vercel.com) → **Sign up with GitHub**
+3. Click **Add New Project** → import your repo
+4. Vercel auto-detects Vite — click **Deploy**
+5. Every `git push` to `main` auto-deploys ✅
 
 ---
 
-## CSV Format
+## Project Structure
 
 ```
-signatuur;afmetingen
-BWB 853;61cm x 61,5cm
-Icones 117;87cm x 66cm
+src/
+├── types.ts                  # Shared TypeScript interfaces
+├── constants.ts              # WALL_WIDTH, WALL_HEIGHT, PADDING, SCALE, COLLECTION_COLORS
+├── App.tsx                   # Root: state, CSV loading, view routing
+├── main.tsx                  # Entry point
+├── index.css                 # Tailwind directives + print styles
+├── vite-env.d.ts             # Vite client type declarations
+├── components/
+│   ├── Header.tsx            # App title, CSV upload, stats badges
+│   ├── Sidebar.tsx           # Legend + Summary + Zoom slider
+│   ├── Dashboard.tsx         # Wall cards grid (overview)
+│   ├── WallCard.tsx          # Single wall card for dashboard grid
+│   ├── WallDetail.tsx        # Full wall detail view with pagination + print
+│   ├── WallCanvas.tsx        # Wall rendering (used in both card + detail)
+│   ├── PaintingRect.tsx      # Single painting rectangle + tooltip
+│   ├── Tooltip.tsx           # Floating tooltip component
+│   ├── Legend.tsx            # Collection color legend
+│   ├── SummaryPanel.tsx      # Stats cards
+│   └── ZoomSlider.tsx        # Zoom range input
+└── utils/
+    ├── parseCsv.ts           # CSV parsing + dimension extraction
+    └── packPaintings.ts      # Shelf bin-packing algorithm
 ```
 
-- Delimiter: `;`
-- Dimensions format: `{width}cm x {height}cm` (Dutch decimal notation with `,` supported)
+---
+
+## Screenshots
+
+**Dashboard — Wall Cards Overview**
+
+![Dashboard](https://github.com/user-attachments/assets/87e89980-b88d-4c39-b24f-a22bf66063f2)
+
+**Wall Detail View**
+
+![Detail](https://github.com/user-attachments/assets/c5ecc1b0-b226-425b-a46b-22bf2693e45f)

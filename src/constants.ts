@@ -9,10 +9,10 @@ export const PADDING = 5;
 export const SCALE = 2;
 
 // Color map keyed by collection prefix
-export const COLORS = {
-  BWB: '#3b82f6',           // blue
-  AHM: '#22c55e',           // green
-  'Bild. Mus. Geerts': '#f97316', // orange
-  Icones: '#a855f7',        // purple
-  Unknown: '#9ca3af',       // grey
+export const COLLECTION_COLORS: Record<string, string> = {
+  BWB: '#3b82f6',              // blue-500
+  AHM: '#22c55e',              // green-500
+  'Bild. Mus. Geerts': '#f97316', // orange-500
+  Icones: '#a855f7',           // purple-500
+  Unknown: '#6b7280',          // gray-500
 };
