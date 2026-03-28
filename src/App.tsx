@@ -57,7 +57,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 font-sans flex flex-col">
+    <div className="min-h-screen bg-[#001158] font-sans flex flex-col">
       <Header walls={walls} fileName={fileName} onFileChange={handleFileChange} />
 
       <div className="flex flex-1 overflow-hidden">

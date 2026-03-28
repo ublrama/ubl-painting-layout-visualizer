@@ -10,9 +10,9 @@ export const SCALE = 2;
 
 // Collection color map (hex values)
 export const COLLECTION_COLORS: Record<string, string> = {
-  BWB: '#3b82f6',
-  AHM: '#22c55e',
-  'Bild. Mus. Geerts': '#f97316',
-  Icones: '#a855f7',
-  Unknown: '#6b7280',
+  BWB: '#4a9fd4',           // light steel blue (readable on navy)
+  AHM: '#6abf69',           // soft green
+  'Bild. Mus. Geerts': '#e8a838', // warm amber/gold
+  Icones: '#be1908',        // Leiden red (accent)
+  Unknown: '#8b9db8',       // muted blue-grey
 };

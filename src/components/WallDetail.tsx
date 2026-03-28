@@ -29,16 +29,16 @@ export function WallDetail({
         <nav className="flex items-center gap-2 text-sm">
           <button
             onClick={onBack}
-            className="text-amber-400 hover:underline font-medium"
+            className="text-[#be1908] hover:underline font-medium"
           >
             Dashboard
           </button>
-          <span className="text-gray-500">/</span>
+          <span className="text-[#8b9db8]">/</span>
           <span className="text-white font-medium">Muur {wallNumber}</span>
         </nav>
         <button
           onClick={() => window.print()}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-800 border border-gray-700 text-sm text-gray-300 hover:text-white hover:border-gray-600 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#002580] border border-[#002580] text-sm text-[#8b9db8] hover:text-white hover:border-[#be1908] transition-colors"
         >
           🖨️ Afdrukken
         </button>
@@ -85,8 +85,8 @@ export function WallDetail({
       </div>
 
       {/* Paintings list (screen only) */}
-      <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
-        <h3 className="text-sm font-semibold text-gray-400 mb-3">
+      <div className="bg-[#001158] rounded-xl border border-[#002580] p-4">
+        <h3 className="text-sm font-semibold text-[#8b9db8] mb-3">
           Schilderijen op deze muur ({wall.paintings.length})
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -96,14 +96,14 @@ export function WallDetail({
             return (
               <div
                 key={p.signatuur}
-                className="flex items-center gap-2 bg-gray-800/50 rounded-lg px-3 py-2 text-xs"
+                className="flex items-center gap-2 bg-[#002580]/50 rounded-lg px-3 py-2 text-xs"
               >
                 <span
                   className="w-2 h-2 rounded-sm flex-shrink-0"
                   style={{ backgroundColor: color }}
                 />
-                <span className="text-gray-300 truncate">{p.signatuur}</span>
-                <span className="text-gray-500 ml-auto flex-shrink-0">
+                <span className="text-[#8b9db8] truncate">{p.signatuur}</span>
+                <span className="text-[#8b9db8] ml-auto flex-shrink-0">
                   {p.width}×{p.height}
                 </span>
               </div>
@@ -117,17 +117,17 @@ export function WallDetail({
         <button
           onClick={onPrev}
           disabled={wall.index === 0}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-gray-800 border border-gray-700 text-sm font-medium text-gray-300 hover:text-white hover:border-gray-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#002580] border border-[#002580] text-sm font-medium text-[#8b9db8] hover:text-white hover:border-[#be1908] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           ← Vorige muur
         </button>
-        <span className="text-sm text-gray-400 font-medium">
+        <span className="text-sm text-[#8b9db8] font-medium">
           Muur {wallNumber} / {totalWalls}
         </span>
         <button
           onClick={onNext}
           disabled={wall.index === totalWalls - 1}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-gray-800 border border-gray-700 text-sm font-medium text-gray-300 hover:text-white hover:border-gray-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#002580] border border-[#002580] text-sm font-medium text-[#8b9db8] hover:text-white hover:border-[#be1908] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           Volgende muur →
         </button>
