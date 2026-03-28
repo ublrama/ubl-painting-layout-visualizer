@@ -16,32 +16,32 @@ export function WallCard({ wall, onSelect }: WallCardProps) {
   return (
     <div
       className="
-        bg-gray-900 border border-gray-800 rounded-xl overflow-hidden
+        bg-[#002580]/50 border border-[#002580] rounded-xl overflow-hidden
         transition-all duration-200
-        hover:border-amber-400/50 hover:scale-[1.02] hover:shadow-xl hover:shadow-amber-400/5
+        hover:border-[#be1908] hover:scale-[1.02] hover:shadow-xl hover:shadow-[#be1908]/5
         cursor-pointer group
       "
       onClick={onSelect}
     >
       {/* Card header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[#002580]">
         <h3 className="font-semibold text-white text-sm">Muur {wall.index + 1}</h3>
-        <span className="bg-amber-400/15 text-amber-400 text-xs font-medium px-2 py-0.5 rounded-full">
+        <span className="bg-[#be1908]/15 text-[#be1908] text-xs font-medium px-2 py-0.5 rounded-full">
           {wall.paintings.length} schilderijen
         </span>
       </div>
 
       {/* Miniature preview */}
-      <div className="flex items-center justify-center bg-gray-950/60 py-4 px-3 overflow-hidden">
+      <div className="flex items-center justify-center bg-[#001158] py-4 px-3 overflow-hidden">
         <div style={{ width: PREVIEW_WIDTH, height: PREVIEW_HEIGHT, flexShrink: 0 }}>
           <WallCanvas wall={wall} scale={PREVIEW_SCALE} />
         </div>
       </div>
 
       {/* Footer button */}
-      <div className="px-4 py-3 border-t border-gray-800">
+      <div className="px-4 py-3 border-t border-[#002580]">
         <button
-          className="w-full text-xs text-amber-400 font-medium group-hover:underline"
+          className="w-full text-xs text-[#be1908] font-medium group-hover:underline"
           onClick={(e) => { e.stopPropagation(); onSelect(); }}
         >
           Bekijk details →

@@ -9,11 +9,11 @@ export function ZoomSlider({ zoom, onChange, visible }: ZoomSliderProps) {
 
   return (
     <div>
-      <h3 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3">
+      <h3 className="text-xs font-semibold uppercase tracking-widest text-[#8b9db8] mb-3">
         Zoom
       </h3>
       <div className="flex items-center gap-3">
-        <span className="text-xs text-gray-500">1×</span>
+        <span className="text-xs text-[#8b9db8]">1×</span>
         <input
           type="range"
           min={1}
@@ -21,11 +21,11 @@ export function ZoomSlider({ zoom, onChange, visible }: ZoomSliderProps) {
           step={0.5}
           value={zoom}
           onChange={(e) => onChange(parseFloat(e.target.value))}
-          className="flex-1 accent-amber-400"
+          className="flex-1 accent-[#be1908]"
         />
-        <span className="text-xs text-gray-500">4×</span>
+        <span className="text-xs text-[#8b9db8]">4×</span>
       </div>
-      <p className="text-xs text-center text-amber-400 mt-1">Schaal: {zoom} px/cm</p>
+      <p className="text-xs text-center text-[#be1908] mt-1">Schaal: {zoom} px/cm</p>
     </div>
   );
 }
