@@ -2,7 +2,6 @@ import { useState } from 'react';
 import type { CSSProperties, RefObject, MouseEvent } from 'react';
 import type { PlacedPainting } from '../types';
 import { COLLECTION_COLORS } from '../constants';
-import { getCollection } from '../utils/parseCsv';
 import { Tooltip } from './Tooltip';
 
 interface PaintingRectProps {
@@ -14,7 +13,7 @@ interface PaintingRectProps {
 export function PaintingRect({ painting, scale, containerRef }: PaintingRectProps) {
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
 
-  const collection = getCollection(painting.signatuur);
+  const collection = painting.collection;
   const color = COLLECTION_COLORS[collection] ?? COLLECTION_COLORS['Unknown'];
 
   const style: CSSProperties = {

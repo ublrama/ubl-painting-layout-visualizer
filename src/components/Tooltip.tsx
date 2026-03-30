@@ -16,7 +16,7 @@ export function Tooltip({ painting, color, collection, x, y }: TooltipProps) {
     >
       <p className="font-semibold text-white mb-1 truncate">{painting.signatuur}</p>
       <p className="text-gray-400 text-xs mb-1">
-        {painting.width} cm × {painting.height} cm
+        {painting.width} cm × {painting.height} cm × {painting.depth} cm diep
       </p>
       <p className="text-gray-500 text-xs mb-2">
         x: {painting.x} cm, y: {painting.y} cm
