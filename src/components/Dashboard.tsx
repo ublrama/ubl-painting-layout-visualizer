@@ -1,5 +1,27 @@
-import type { AssignmentResult } from '../types';
+import { useState, useMemo } from 'react';
+import type { AssignmentResult, Rack, RackType } from '../types';
 import { RackCard } from './RackCard';
+
+type UsageFilter = 'all' | 'used' | 'unused';
+type SortDir     = 'asc' | 'desc';
+
+/** Parse "Pos. X-Ya" → sortable tuple (position, side 0=a/1=b, prefix) */
+function parseRackPos(name: string) {
+  const m = name.match(/^Pos\.\s+(\d+)-(\d+)([ab])$/i);
+  if (!m) return { pos: Infinity, side: 0, prefix: 0 };
+  return {
+    pos:    parseInt(m[2], 10),
+    side:   m[3].toLowerCase() === 'a' ? 0 : 1,
+    prefix: parseInt(m[1], 10),
+  };
+}
+
+function compareRacks(a: Rack, b: Rack, dir: SortDir): number {
+  const ka = parseRackPos(a.name);
+  const kb = parseRackPos(b.name);
+  const diff = ka.prefix - kb.prefix || ka.pos - kb.pos || ka.side - kb.side;
+  return dir === 'asc' ? diff : -diff;
+}
 
 interface DashboardProps {
   assignmentResult: AssignmentResult | null;
@@ -7,6 +29,27 @@ interface DashboardProps {
 }
 
 export function Dashboard({ assignmentResult, onSelectRack }: DashboardProps) {
+  // ── All hooks must be called unconditionally before any early return ──
+  const [usageFilter, setUsageFilter] = useState<UsageFilter>('used');
+  const [sortDir,     setSortDir]     = useState<SortDir>('asc');
+  const [typeFilter,  setTypeFilter]  = useState<number | null>(null);
+
+  const racks      = assignmentResult?.racks     ?? [];
+  const unassigned = assignmentResult?.unassigned ?? [];
+
+  // Unique RackType objects (with dimensions), sorted by id
+  const rackTypes = useMemo<RackType[]>(() => {
+    const seen = new Set<number>();
+    const result: RackType[] = [];
+    for (const r of racks) {
+      if (!seen.has(r.rackType.id)) {
+        seen.add(r.rackType.id);
+        result.push(r.rackType);
+      }
+    }
+    return result.sort((a, b) => a.id - b.id);
+  }, [racks]);
+
   if (!assignmentResult) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center py-24">
@@ -25,7 +68,32 @@ export function Dashboard({ assignmentResult, onSelectRack }: DashboardProps) {
     );
   }
 
-  const { racks, unassigned } = assignmentResult;
+
+  const usedCount   = racks.filter((r) => r.frontPaintings.length + r.backPaintings.length > 0).length;
+  const unusedCount = racks.length - usedCount;
+
+  // 1. Usage filter
+  const usageFiltered = racks.filter((rack) => {
+    const hasItems = rack.frontPaintings.length + rack.backPaintings.length > 0;
+    if (usageFilter === 'used')   return hasItems;
+    if (usageFilter === 'unused') return !hasItems;
+    return true;
+  });
+
+  // 2. Type filter
+  const typeFiltered =
+    typeFilter === null
+      ? usageFiltered
+      : usageFiltered.filter((r) => r.rackType.id === typeFilter);
+
+  // 3. Sort
+  const displayRacks = [...typeFiltered].sort((a, b) => compareRacks(a, b, sortDir));
+
+  const usageOptions: { key: UsageFilter; label: string; count: number }[] = [
+    { key: 'all',    label: 'Alle rekken',      count: racks.length },
+    { key: 'used',   label: 'Gebruikte rekken', count: usedCount },
+    { key: 'unused', label: 'Lege rekken',       count: unusedCount },
+  ];
 
   return (
     <div>
@@ -40,19 +108,96 @@ export function Dashboard({ assignmentResult, onSelectRack }: DashboardProps) {
         </div>
       )}
 
-      <h2 className="text-lg font-semibold text-gray-900 mb-5">
-        Alle rekken
-        <span className="ml-2 text-sm font-normal text-gray-600">({racks.length} totaal)</span>
-      </h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-        {racks.map((rack, index) => (
-          <RackCard
-            key={rack.name}
-            rack={rack}
-            onSelect={() => onSelectRack(index)}
-          />
-        ))}
+      {/* ── Row 1: title + usage filter ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+        <h2 className="text-lg font-semibold text-gray-900">
+          Rekken
+          <span className="ml-2 text-sm font-normal text-gray-500">
+            ({displayRacks.length} van {racks.length})
+          </span>
+        </h2>
+
+        {/* Usage filter pills */}
+        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1 self-start sm:self-auto">
+          {usageOptions.map(({ key, label, count }) => (
+            <button
+              key={key}
+              onClick={() => setUsageFilter(key)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                usageFilter === key
+                  ? 'bg-white text-gray-900 shadow-sm border border-gray-200'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {label}
+              <span
+                className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-semibold ${
+                  usageFilter === key ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-500'
+                }`}
+              >
+                {count}
+              </span>
+            </button>
+          ))}
+        </div>
       </div>
+
+      {/* ── Row 2: sort toggle + type filter ── */}
+      <div className="flex flex-wrap items-center gap-2 mb-5 pb-4 border-b border-gray-100">
+        {/* Sort direction toggle */}
+        <button
+          onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border-2 border-gray-200 bg-white text-xs font-medium text-gray-700 hover:border-blue-400 transition-colors select-none"
+          title="Sorteervolgorde omdraaien"
+        >
+          <span>Naam</span>
+          <span className="text-base leading-none">{sortDir === 'asc' ? '↑' : '↓'}</span>
+          <span className="text-gray-400">{sortDir === 'asc' ? 'A→Z' : 'Z→A'}</span>
+        </button>
+
+        {/* Divider */}
+        <div className="h-5 w-px bg-gray-200" />
+
+        {/* Type filter dropdown */}
+        <div className="flex items-center gap-2">
+          <label htmlFor="type-filter" className="text-xs text-gray-500 font-medium whitespace-nowrap">
+            Type:
+          </label>
+          <select
+            id="type-filter"
+            value={typeFilter ?? ''}
+            onChange={(e) => setTypeFilter(e.target.value === '' ? null : parseInt(e.target.value, 10))}
+            className="text-xs border-2 border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 hover:border-blue-400 focus:border-blue-500 focus:outline-none transition-colors cursor-pointer"
+          >
+            <option value="">Alle types</option>
+            {rackTypes.map((rt) => (
+              <option key={rt.id} value={rt.id}>
+                {rt.id} —  {rt.height} x {rt.width} x {rt.maxDepth}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* ── Grid ── */}
+      {displayRacks.length === 0 ? (
+        <p className="text-sm text-gray-500 py-10 text-center">
+          Geen rekken gevonden voor dit filter.
+        </p>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {displayRacks.map((rack) => {
+            const originalIndex = racks.indexOf(rack);
+            return (
+              <RackCard
+                key={rack.name}
+                rack={rack}
+                onSelect={() => onSelectRack(originalIndex)}
+              />
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

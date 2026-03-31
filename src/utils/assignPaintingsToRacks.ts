@@ -76,13 +76,50 @@ function buildShelfState(placed: PlacedPainting[]): ShelfState {
 }
 
 /**
- * Assign paintings to racks using a best-fit depth strategy and shelf bin-packing.
+ * Explicit list of priority racks.
+ * These are filled first (best-fit depth within the group).
+ * All other racks are only used once these are full.
+ */
+const PRIORITY_RACKS = new Set<string>([
+  'Pos. 2-11a',
+  'Pos. 4-12a',
+  'Pos. 4-11b',
+  'Pos. 1-12a',
+  'Pos. 1-12b',
+  'Pos. 1-13a',
+  'Pos. 1-13b',
+  'Pos. 1-14a',
+  'Pos. 1-14b',
+  'Pos. 1-15a',
+  'Pos. 1-15b',
+  'Pos. 1-16a',
+  'Pos. 1-16b',
+  'Pos. 1-17a',
+  'Pos. 1-17b',
+  'Pos. 1-18a',
+  'Pos. 1-18b',
+  'Pos. 1-19a',
+  'Pos. 1-19b',
+  'Pos. 1-20a',
+  'Pos. 1-20b',
+  'Pos. 1-21a',
+  'Pos. 1-21b',
+  'Pos. 3-22a',
+]);
+
+const isPriorityRack = (name: string) => PRIORITY_RACKS.has(name);
+
+/**
+ * Assign paintings to racks using a priority-first, best-fit depth strategy
+ * and shelf bin-packing.
  *
  * Algorithm:
  * 1. Sort paintings by depth ascending (shallowest first).
- * 2. For each painting, find eligible racks (maxDepth >= painting.depth),
- *    sorted by maxDepth ascending (prefer smallest viable maxDepth).
- * 3. Try to place on front first, then back of each eligible rack.
+ * 2. For each painting split eligible racks (maxDepth >= depth) into:
+ *    a. Priority group  – racks "Pos. 1-11a … Pos. 1-22a", sorted by maxDepth asc.
+ *    b. Remaining group – all other racks,                  sorted by maxDepth asc.
+ *    Try the priority group first, then the remaining group.
+ * 3. Try front first, then back of each rack.
  * 4. If nowhere fits, add to unassigned.
  */
 export function assignPaintingsToRacks(paintings: Painting[], racks: Rack[]): AssignmentResult {
@@ -99,10 +136,13 @@ export function assignPaintingsToRacks(paintings: Painting[], racks: Rack[]): As
   const unassigned: Painting[] = [];
 
   for (const painting of sorted) {
-    // Find eligible racks sorted by maxDepth ascending
-    const eligible = workRacks
-      .filter((r) => r.rackType.maxDepth >= painting.depth)
-      .sort((a, b) => a.rackType.maxDepth - b.rackType.maxDepth);
+    // Priority racks first, remaining racks second – best-fit depth within each group
+    const byDepth = (a: Rack, b: Rack) => a.rackType.maxDepth - b.rackType.maxDepth;
+    const canFit  = (r: Rack) => r.rackType.maxDepth >= painting.depth;
+
+    const priorityEligible  = workRacks.filter((r) =>  isPriorityRack(r.name) && canFit(r)).sort(byDepth);
+    const remainingEligible = workRacks.filter((r) => !isPriorityRack(r.name) && canFit(r)).sort(byDepth);
+    const eligible = [...priorityEligible, ...remainingEligible];
 
     let placed = false;
     for (const rack of eligible) {
