@@ -1,9 +1,12 @@
 export interface Painting {
+  id: string;                       // uuid
   signatuur: string;
   collection: string;
-  width: number;   // cm (breedte)
-  height: number;  // cm (hoogte)
-  depth: number;   // cm (diepte), 0 if missing
+  width: number;                    // cm (breedte)
+  height: number;                   // cm (hoogte)
+  depth: number;                    // cm (diepte), 0 if missing
+  assignedRackName: string | null;  // null = unassigned
+  manuallyPlaced: boolean;          // true once physically confirmed
 }
 
 export interface RackType {
@@ -27,4 +30,30 @@ export interface PlacedPainting extends Painting {
 export interface AssignmentResult {
   racks: Rack[];
   unassigned: Painting[];
+  confirmedAt: string | null;  // ISO date string when placement was confirmed/frozen
+}
+
+export interface RackSuggestion {
+  rackName: string;
+  rackType: RackType;
+  paintingCount: number;
+  canFit: boolean;
+  remainingArea: number;
+}
+
+export interface MoveSuggestion {
+  painting: PlacedPainting;
+  suggestedRack: string;
+  canFit: boolean;
+}
+
+export interface ForcePlacementResult {
+  canPlaceDirectly: boolean;
+  moveSuggestions: MoveSuggestion[];
+}
+
+export interface FillSuggestion {
+  painting: Painting;
+  fitsWidth: number;
+  fitsHeight: number;
 }

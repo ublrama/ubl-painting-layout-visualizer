@@ -26,9 +26,10 @@ function compareRacks(a: Rack, b: Rack, dir: SortDir): number {
 interface DashboardProps {
   assignmentResult: AssignmentResult | null;
   onSelectRack: (index: number) => void;
+  onSwitchToPaintings?: () => void;
 }
 
-export function Dashboard({ assignmentResult, onSelectRack }: DashboardProps) {
+export function Dashboard({ assignmentResult, onSelectRack, onSwitchToPaintings }: DashboardProps) {
   // ── All hooks must be called unconditionally before any early return ──
   const [usageFilter, setUsageFilter] = useState<UsageFilter>('used');
   const [sortDir,     setSortDir]     = useState<SortDir>('asc');
@@ -103,7 +104,16 @@ export function Dashboard({ assignmentResult, onSelectRack }: DashboardProps) {
           <span className="text-lg">⚠️</span>
           <span>
             <strong>{unassigned.length}</strong> schilderijen konden niet worden geplaatst
-            (diepte te groot of rekken vol)
+            (diepte te groot of rekken vol).{' '}
+            {onSwitchToPaintings && (
+              <button
+                type="button"
+                onClick={onSwitchToPaintings}
+                className="underline font-medium hover:text-orange-900"
+              >
+                Bekijk ongeplaatste schilderijen →
+              </button>
+            )}
           </span>
         </div>
       )}
@@ -197,6 +207,18 @@ export function Dashboard({ assignmentResult, onSelectRack }: DashboardProps) {
             );
           })}
         </div>
+      )}
+
+      {/* FAB — Add painting */}
+      {onSwitchToPaintings && (
+        <button
+          type="button"
+          onClick={onSwitchToPaintings}
+          className="fixed bottom-8 right-8 flex items-center gap-2 px-5 py-3 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-lg transition-colors z-20"
+          title="Schilderij toevoegen"
+        >
+          + Schilderij toevoegen
+        </button>
       )}
     </div>
   );

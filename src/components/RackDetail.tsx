@@ -1,12 +1,17 @@
-import type { Rack } from '../types';
+import { useState } from 'react';
+import type { Rack, Painting } from '../types';
 import { RackCanvas } from './RackCanvas';
 import { COLLECTION_COLORS } from '../constants';
+import { AddPaintingModal } from './AddPaintingModal';
+import { RemovePaintingDialog } from './RemovePaintingDialog';
+import { usePaintings } from '../hooks/usePaintings';
 
 interface RackDetailProps {
   rack: Rack;
   rackIndex: number;
   totalRacks: number;
   zoom: number;
+  isConfirmed?: boolean;
   onBack: () => void;
   onPrev: () => void;
   onNext: () => void;
@@ -17,11 +22,27 @@ export function RackDetail({
   rackIndex,
   totalRacks,
   zoom,
+  isConfirmed,
   onBack,
   onPrev,
   onNext,
 }: RackDetailProps) {
   const { rackType } = rack;
+  const [showAddModal,   setShowAddModal]   = useState(false);
+  const [removeTarget,   setRemoveTarget]   = useState<Painting | null>(null);
+
+  const { addPainting, deletePainting } = usePaintings();
+
+  async function handleAdd(data: Omit<Painting, 'id' | 'manuallyPlaced'>) {
+    await addPainting({ ...data, assignedRackName: rack.name });
+    setShowAddModal(false);
+  }
+
+  async function handleRemove() {
+    if (!removeTarget) return;
+    await deletePainting(removeTarget.id);
+    setRemoveTarget(null);
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -34,12 +55,21 @@ export function RackDetail({
           <span className="text-gray-400">/</span>
           <span className="text-gray-900 font-medium">{rack.name}</span>
         </nav>
-        <button
-          onClick={() => window.print()}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white border-2 border-gray-300 text-sm text-gray-700 hover:text-gray-900 hover:border-blue-500 transition-colors"
-        >
-          🖨️ Afdrukken
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
+          >
+            + Schilderij toevoegen
+          </button>
+          <button
+            onClick={() => window.print()}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white border-2 border-gray-300 text-sm text-gray-700 hover:text-gray-900 hover:border-blue-500 transition-colors"
+          >
+            🖨️ Afdrukken
+          </button>
+        </div>
       </div>
 
       {/* Rack info */}
@@ -105,6 +135,14 @@ export function RackDetail({
                 <span className="w-2 h-2 rounded-sm flex-shrink-0" style={{ backgroundColor: color }} />
                 <span className="text-gray-700 truncate">{p.signatuur}</span>
                 <span className="text-gray-500 ml-auto flex-shrink-0">{p.width}×{p.height} cm</span>
+                <button
+                  type="button"
+                  onClick={() => setRemoveTarget(p)}
+                  className="ml-2 text-red-400 hover:text-red-600 text-xs font-medium flex-shrink-0"
+                  title="Verwijderen van rek"
+                >
+                  ✕
+                </button>
               </div>
             );
           })}
@@ -131,6 +169,24 @@ export function RackDetail({
           Volgend rek →
         </button>
       </div>
+
+      {/* Modals */}
+      {showAddModal && (
+        <AddPaintingModal
+          initialRackName={rack.name}
+          isConfirmed={isConfirmed}
+          onSave={handleAdd}
+          onCancel={() => setShowAddModal(false)}
+        />
+      )}
+      {removeTarget && (
+        <RemovePaintingDialog
+          painting={removeTarget}
+          rackName={rack.name}
+          onRemove={handleRemove}
+          onCancel={() => setRemoveTarget(null)}
+        />
+      )}
     </div>
   );
 }
