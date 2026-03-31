@@ -1,68 +1,138 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { ChangeEvent } from 'react';
-import type { Wall } from './types';
-import { parseCsv } from './utils/parseCsv';
-import { packPaintings } from './utils/packPaintings';
+import type { Painting, RackType, Rack, AssignmentResult } from './types';
+import { parsePaintingsCsv } from './utils/parsePaintingsCsv';
+import { parseRackTypesCsv } from './utils/parseRackTypesCsv';
+import { parseRacksCsv } from './utils/parseRacksCsv';
+import { assignPaintingsToRacks } from './utils/assignPaintingsToRacks';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
-import { WallDetail } from './components/WallDetail';
+import { RackDetail } from './components/RackDetail';
 import { SCALE } from './constants';
 
 type View =
   | { kind: 'dashboard' }
-  | { kind: 'detail'; wallIndex: number };
+  | { kind: 'detail'; rackIndex: number };
 
 export default function App() {
-  const [walls, setWalls] = useState<Wall[]>([]);
-  const [fileName, setFileName] = useState<string | null>(null);
+  const [paintings, setPaintings] = useState<Painting[]>([]);
+  const [racks, setRacks] = useState<Rack[]>([]);
+  const [assignmentResult, setAssignmentResult] = useState<AssignmentResult | null>(null);
+
+  // Keep a ref to the latest rack types so handlers can access without stale closures
+  const rackTypesRef = useRef<RackType[]>([]);
+
+  const [paintingsFileName, setPaintingsFileName] = useState<string | null>(null);
+  const [rackTypesFileName, setRackTypesFileName] = useState<string | null>(null);
+  const [racksFileName, setRacksFileName] = useState<string | null>(null);
+
   const [view, setView] = useState<View>({ kind: 'dashboard' });
   const [zoom, setZoom] = useState<number>(SCALE);
 
-  const handleFileChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+  // Re-run assignment whenever paintings or racks change
+  useEffect(() => {
+    if (paintings.length > 0 && racks.length > 0) {
+      const result = assignPaintingsToRacks(paintings, racks);
+      setAssignmentResult(result);
+      setView({ kind: 'dashboard' });
+    }
+  }, [paintings, racks]);
+
+  const handlePaintingsChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setFileName(file.name);
+    setPaintingsFileName(file.name);
     const reader = new FileReader();
     reader.onload = (ev) => {
       const text = ev.target?.result;
       if (typeof text !== 'string') return;
-      const paintings = parseCsv(text);
-      const packed = packPaintings(paintings);
-      setWalls(packed);
-      setView({ kind: 'dashboard' });
+      setPaintings(parsePaintingsCsv(text));
     };
     reader.readAsText(file);
   }, []);
 
-  // Load demo CSV on mount
+  const handleRackTypesChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setRackTypesFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result;
+      if (typeof text !== 'string') return;
+      const newRackTypes = parseRackTypesCsv(text);
+      rackTypesRef.current = newRackTypes;
+      // Re-join existing racks with new rack type definitions
+      setRacks((prevRacks) => {
+        if (prevRacks.length === 0) return prevRacks;
+        const typeMap = new Map<number, RackType>(newRackTypes.map((rt) => [rt.id, rt]));
+        return prevRacks.map((r) => ({
+          ...r,
+          rackType: typeMap.get(r.rackType.id) ?? r.rackType,
+        }));
+      });
+    };
+    reader.readAsText(file);
+  }, []);
+
+  const handleRacksChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setRacksFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result;
+      if (typeof text !== 'string') return;
+      const newRacks = parseRacksCsv(text, rackTypesRef.current);
+      setRacks(newRacks);
+    };
+    reader.readAsText(file);
+  }, []);
+
+  // Load demo data on mount
   useEffect(() => {
-    fetch('/demo.csv')
-      .then((r) => r.text())
-      .then((text) => {
-        const paintings = parseCsv(text);
-        const packed = packPaintings(paintings);
-        setWalls(packed);
-        setFileName('demo.csv');
+    Promise.all([
+      fetch('/demo-paintings.csv').then((r) => r.text()),
+      fetch('/demo-rack-types.csv').then((r) => r.text()),
+      fetch('/demo-racks.csv').then((r) => r.text()),
+    ])
+      .then(([paintingsText, rackTypesText, racksText]) => {
+        const demoPaintings = parsePaintingsCsv(paintingsText);
+        const demoRackTypes = parseRackTypesCsv(rackTypesText);
+        const demoRacks = parseRacksCsv(racksText, demoRackTypes);
+        rackTypesRef.current = demoRackTypes;
+        setPaintings(demoPaintings);
+        setRacks(demoRacks);
+        setPaintingsFileName('demo-paintings.csv');
+        setRackTypesFileName('demo-rack-types.csv');
+        setRacksFileName('demo-racks.csv');
       })
       .catch(() => {
-        // demo.csv not available – just show empty state
+        // Demo files not available – show empty state
       });
   }, []);
 
-  const currentWallIndex = view.kind === 'detail' ? view.wallIndex : 0;
+  const currentRackIndex = view.kind === 'detail' ? view.rackIndex : 0;
 
-  function goToWall(index: number) {
-    setView({ kind: 'detail', wallIndex: index });
+  function goToRack(index: number) {
+    setView({ kind: 'detail', rackIndex: index });
   }
 
   return (
     <div className="min-h-screen bg-white font-sans flex flex-col">
-      <Header walls={walls} fileName={fileName} onFileChange={handleFileChange} />
+      <Header
+        assignmentResult={assignmentResult}
+        paintingsFileName={paintingsFileName}
+        rackTypesFileName={rackTypesFileName}
+        racksFileName={racksFileName}
+        onPaintingsChange={handlePaintingsChange}
+        onRackTypesChange={handleRackTypesChange}
+        onRacksChange={handleRacksChange}
+      />
 
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
-          walls={walls}
+          assignmentResult={assignmentResult}
           zoom={zoom}
           onZoomChange={setZoom}
           showZoom={view.kind === 'detail'}
@@ -70,19 +140,23 @@ export default function App() {
 
         <main className="flex-1 overflow-auto p-6">
           {view.kind === 'dashboard' ? (
-            <Dashboard walls={walls} onSelectWall={goToWall} />
+            <Dashboard
+              assignmentResult={assignmentResult}
+              onSelectRack={goToRack}
+            />
           ) : (
-            walls.length > 0 && (
-              <WallDetail
-                wall={walls[currentWallIndex]}
-                totalWalls={walls.length}
+            assignmentResult && assignmentResult.racks.length > 0 && (
+              <RackDetail
+                rack={assignmentResult.racks[currentRackIndex]}
+                rackIndex={currentRackIndex}
+                totalRacks={assignmentResult.racks.length}
                 zoom={zoom}
                 onBack={() => setView({ kind: 'dashboard' })}
-                onPrev={() =>
-                  goToWall(Math.max(0, currentWallIndex - 1))
-                }
+                onPrev={() => goToRack(Math.max(0, currentRackIndex - 1))}
                 onNext={() =>
-                  goToWall(Math.min(walls.length - 1, currentWallIndex + 1))
+                  goToRack(
+                    Math.min(assignmentResult.racks.length - 1, currentRackIndex + 1),
+                  )
                 }
               />
             )

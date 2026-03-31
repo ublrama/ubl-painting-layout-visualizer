@@ -1,18 +1,26 @@
-import type { Wall } from '../types';
+import type { AssignmentResult } from '../types';
 
 interface SummaryPanelProps {
-  walls: Wall[];
+  assignmentResult: AssignmentResult | null;
 }
 
-export function SummaryPanel({ walls }: SummaryPanelProps) {
-  const totalPaintings = walls.reduce((sum, w) => sum + w.paintings.length, 0);
-  const avgPerWall =
-    walls.length > 0 ? (totalPaintings / walls.length).toFixed(1) : '0';
+export function SummaryPanel({ assignmentResult }: SummaryPanelProps) {
+  const totalRacks = assignmentResult?.racks.length ?? 0;
+  const totalPlaced = assignmentResult
+    ? assignmentResult.racks.reduce(
+        (sum, r) => sum + r.frontPaintings.length + r.backPaintings.length,
+        0,
+      )
+    : 0;
+  const unassigned = assignmentResult?.unassigned.length ?? 0;
+  const avgPerRack =
+    totalRacks > 0 ? (totalPlaced / totalRacks).toFixed(1) : '0';
 
   const stats = [
-    { label: 'Muren', value: walls.length, icon: '🏛️' },
-    { label: 'Schilderijen', value: totalPaintings, icon: '🖼️' },
-    { label: 'Gem. per muur', value: avgPerWall, icon: '📊' },
+    { label: 'Rekken', value: totalRacks, icon: '🗂️', danger: false },
+    { label: 'Schilderijen geplaatst', value: totalPlaced, icon: '🖼️', danger: false },
+    { label: 'Niet geplaatst', value: unassigned, icon: '⚠️', danger: unassigned > 0 },
+    { label: 'Gem. per rek', value: avgPerRack, icon: '📊', danger: false },
   ];
 
   return (
@@ -21,7 +29,7 @@ export function SummaryPanel({ walls }: SummaryPanelProps) {
         Overzicht
       </h3>
       <div className="flex flex-col gap-2">
-        {stats.map(({ label, value, icon }) => (
+        {stats.map(({ label, value, icon, danger }) => (
           <div
             key={label}
             className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 border border-gray-200"
@@ -30,7 +38,9 @@ export function SummaryPanel({ walls }: SummaryPanelProps) {
               <span>{icon}</span>
               {label}
             </span>
-            <span className="text-sm font-semibold text-blue-600">{value}</span>
+            <span className={`text-sm font-semibold ${danger ? 'text-red-600' : 'text-blue-600'}`}>
+              {value}
+            </span>
           </div>
         ))}
       </div>
