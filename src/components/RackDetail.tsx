@@ -47,35 +47,20 @@ export function RackDetail({
         <span><strong>Type:</strong> {rackType.id}</span>
         <span><strong>Afmetingen:</strong> {rackType.height} × {rackType.width} cm (H × B)</span>
         <span><strong>Max. diepte:</strong> {rackType.maxDepth} cm</span>
-        <span><strong>Voorkant:</strong> {rack.frontPaintings.length} schilderijen</span>
-        <span><strong>Achterkant:</strong> {rack.backPaintings.length} schilderijen</span>
+        <span><strong>Schilderijen:</strong> {rack.paintings.length}</span>
       </div>
 
       {/* Print area */}
       <div id="print-area">
-        {/* Two canvases side by side */}
-        <div className="flex flex-col lg:flex-row gap-6 overflow-x-auto">
-          {/* Front */}
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-gray-800">Voorkant</h3>
-              <span className="bg-green-100 text-green-700 text-xs font-medium px-2 py-0.5 rounded-full">
-                {rack.frontPaintings.length} schilderijen
-              </span>
-            </div>
-            <RackCanvas rack={rack} side="front" scale={zoom} />
+        {/* Single canvas */}
+        <div className="flex flex-col gap-2 overflow-x-auto">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-gray-800">{rack.name}</h3>
+            <span className="bg-blue-100 text-blue-700 text-xs font-medium px-2 py-0.5 rounded-full">
+              {rack.paintings.length} schilderijen
+            </span>
           </div>
-
-          {/* Back */}
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-gray-800">Achterkant</h3>
-              <span className="bg-purple-100 text-purple-700 text-xs font-medium px-2 py-0.5 rounded-full">
-                {rack.backPaintings.length} schilderijen
-              </span>
-            </div>
-            <RackCanvas rack={rack} side="back" scale={zoom} />
-          </div>
+          <RackCanvas rack={rack} scale={zoom} />
         </div>
 
         {/* Print-only legend table */}
@@ -84,7 +69,6 @@ export function RackDetail({
           <table style={{ borderCollapse: 'collapse', width: '100%' }}>
             <thead>
               <tr>
-                <th style={{ textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid #ccc' }}>Kant</th>
                 <th style={{ textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid #ccc' }}>Signatuur</th>
                 <th style={{ textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid #ccc' }}>Afmetingen</th>
                 <th style={{ textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid #ccc' }}>Diepte</th>
@@ -92,18 +76,8 @@ export function RackDetail({
               </tr>
             </thead>
             <tbody>
-              {rack.frontPaintings.map((p) => (
-                <tr key={`front-${p.signatuur}`}>
-                  <td style={{ padding: '4px 8px', borderBottom: '1px solid #eee' }}>Voorkant</td>
-                  <td style={{ padding: '4px 8px', borderBottom: '1px solid #eee' }}>{p.signatuur}</td>
-                  <td style={{ padding: '4px 8px', borderBottom: '1px solid #eee' }}>{p.width} cm × {p.height} cm</td>
-                  <td style={{ padding: '4px 8px', borderBottom: '1px solid #eee' }}>{p.depth} cm</td>
-                  <td style={{ padding: '4px 8px', borderBottom: '1px solid #eee' }}>x: {p.x} cm, y: {p.y} cm</td>
-                </tr>
-              ))}
-              {rack.backPaintings.map((p) => (
-                <tr key={`back-${p.signatuur}`}>
-                  <td style={{ padding: '4px 8px', borderBottom: '1px solid #eee' }}>Achterkant</td>
+              {rack.paintings.map((p) => (
+                <tr key={p.signatuur}>
                   <td style={{ padding: '4px 8px', borderBottom: '1px solid #eee' }}>{p.signatuur}</td>
                   <td style={{ padding: '4px 8px', borderBottom: '1px solid #eee' }}>{p.width} cm × {p.height} cm</td>
                   <td style={{ padding: '4px 8px', borderBottom: '1px solid #eee' }}>{p.depth} cm</td>
@@ -118,52 +92,22 @@ export function RackDetail({
       {/* Paintings list (screen only) */}
       <div className="bg-white rounded-xl border-2 border-gray-200 p-4">
         <h3 className="text-sm font-semibold text-gray-700 mb-3">
-          Schilderijen op dit rek ({rack.frontPaintings.length + rack.backPaintings.length})
+          Schilderijen op dit rek ({rack.paintings.length})
         </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* Front column */}
-          <div>
-            <h4 className="text-xs font-semibold text-green-700 uppercase tracking-wide mb-2">
-              Voorkant ({rack.frontPaintings.length})
-            </h4>
-            <div className="flex flex-col gap-1">
-              {rack.frontPaintings.map((p) => {
-                const color = COLLECTION_COLORS[p.collection] ?? COLLECTION_COLORS['Unknown'];
-                return (
-                  <div
-                    key={p.signatuur}
-                    className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2 text-xs border border-gray-200"
-                  >
-                    <span className="w-2 h-2 rounded-sm flex-shrink-0" style={{ backgroundColor: color }} />
-                    <span className="text-gray-700 truncate">{p.signatuur}</span>
-                    <span className="text-gray-500 ml-auto flex-shrink-0">{p.width}×{p.height} cm</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Back column */}
-          <div>
-            <h4 className="text-xs font-semibold text-purple-700 uppercase tracking-wide mb-2">
-              Achterkant ({rack.backPaintings.length})
-            </h4>
-            <div className="flex flex-col gap-1">
-              {rack.backPaintings.map((p) => {
-                const color = COLLECTION_COLORS[p.collection] ?? COLLECTION_COLORS['Unknown'];
-                return (
-                  <div
-                    key={p.signatuur}
-                    className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2 text-xs border border-gray-200"
-                  >
-                    <span className="w-2 h-2 rounded-sm flex-shrink-0" style={{ backgroundColor: color }} />
-                    <span className="text-gray-700 truncate">{p.signatuur}</span>
-                    <span className="text-gray-500 ml-auto flex-shrink-0">{p.width}×{p.height} cm</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+        <div className="flex flex-col gap-1">
+          {rack.paintings.map((p) => {
+            const color = COLLECTION_COLORS[p.collection] ?? COLLECTION_COLORS['Unknown'];
+            return (
+              <div
+                key={p.signatuur}
+                className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2 text-xs border border-gray-200"
+              >
+                <span className="w-2 h-2 rounded-sm flex-shrink-0" style={{ backgroundColor: color }} />
+                <span className="text-gray-700 truncate">{p.signatuur}</span>
+                <span className="text-gray-500 ml-auto flex-shrink-0">{p.width}×{p.height} cm</span>
+              </div>
+            );
+          })}
         </div>
       </div>
 

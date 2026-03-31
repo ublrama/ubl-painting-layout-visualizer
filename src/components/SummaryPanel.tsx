@@ -8,7 +8,7 @@ export function SummaryPanel({ assignmentResult }: SummaryPanelProps) {
   const totalRacks = assignmentResult?.racks.length ?? 0;
   const totalPlaced = assignmentResult
     ? assignmentResult.racks.reduce(
-        (sum, r) => sum + r.frontPaintings.length + r.backPaintings.length,
+        (sum, r) => sum + r.paintings.length,
         0,
       )
     : 0;
@@ -16,10 +16,10 @@ export function SummaryPanel({ assignmentResult }: SummaryPanelProps) {
   const avgPerRack =
     totalRacks > 0 ? (totalPlaced / totalRacks).toFixed(1) : '0';
 
-  // Space calculation: painting footprint vs total rack face area (front + back)
+  // Space calculation: painting footprint vs total rack face area (single side)
   const totalRackArea = assignmentResult
     ? assignmentResult.racks.reduce(
-        (sum, r) => sum + r.rackType.width * r.rackType.height * 2,
+        (sum, r) => sum + r.rackType.width * r.rackType.height,
         0,
       )
     : 0;
@@ -27,7 +27,7 @@ export function SummaryPanel({ assignmentResult }: SummaryPanelProps) {
     ? assignmentResult.racks.reduce(
         (sum, r) =>
           sum +
-          [...r.frontPaintings, ...r.backPaintings].reduce(
+          r.paintings.reduce(
             (a, p) => a + p.width * p.height,
             0,
           ),

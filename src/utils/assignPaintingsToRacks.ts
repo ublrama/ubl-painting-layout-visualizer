@@ -126,8 +126,7 @@ export function assignPaintingsToRacks(paintings: Painting[], racks: Rack[]): As
   // Deep-copy racks so we don't mutate the originals
   const workRacks: Rack[] = racks.map((r) => ({
     ...r,
-    frontPaintings: [],
-    backPaintings: [],
+    paintings: [],
   }));
 
   // Sort paintings by depth ascending
@@ -148,18 +147,10 @@ export function assignPaintingsToRacks(paintings: Painting[], racks: Rack[]): As
     for (const rack of eligible) {
       const { width: rw, height: rh } = rack.rackType;
 
-      // Try front
-      const frontState = buildShelfState(rack.frontPaintings);
-      if (tryPlace(painting, frontState, rw, rh)) {
-        rack.frontPaintings = frontState.paintings;
-        placed = true;
-        break;
-      }
-
-      // Try back
-      const backState = buildShelfState(rack.backPaintings);
-      if (tryPlace(painting, backState, rw, rh)) {
-        rack.backPaintings = backState.paintings;
+      // Single side per rack
+      const state = buildShelfState(rack.paintings);
+      if (tryPlace(painting, state, rw, rh)) {
+        rack.paintings = state.paintings;
         placed = true;
         break;
       }

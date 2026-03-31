@@ -4,17 +4,16 @@ import { PaintingRect } from './PaintingRect';
 
 interface RackCanvasProps {
   rack: Rack;
-  side: 'front' | 'back';
   scale: number;
 }
 
-export function RackCanvas({ rack, side, scale }: RackCanvasProps) {
+export function RackCanvas({ rack, scale }: RackCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const { width: rackWidth, height: rackHeight } = rack.rackType;
 
   const canvasWidth = rackWidth * scale;
   const canvasHeight = rackHeight * scale;
-  const paintings = side === 'front' ? rack.frontPaintings : rack.backPaintings;
+  const paintings = rack.paintings;
 
   return (
     <div>

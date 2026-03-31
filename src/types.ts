@@ -16,8 +16,7 @@ export interface RackType {
 export interface Rack {
   name: string;       // e.g. "Pos. 5-1a"
   rackType: RackType;
-  frontPaintings: PlacedPainting[];
-  backPaintings: PlacedPainting[];
+  paintings: PlacedPainting[];
 }
 
 export interface PlacedPainting extends Painting {

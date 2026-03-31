@@ -12,7 +12,7 @@ const PREVIEW_HEIGHT = 180;
 export function RackCard({ rack, onSelect }: RackCardProps) {
   const previewScale = PREVIEW_HEIGHT / rack.rackType.height;
   const previewWidth = Math.round(rack.rackType.width * previewScale);
-  const totalPaintings = rack.frontPaintings.length + rack.backPaintings.length;
+  const totalPaintings = rack.paintings.length;
 
   return (
     <div
@@ -37,17 +37,17 @@ export function RackCard({ rack, onSelect }: RackCardProps) {
         </span>
       </div>
 
-      {/* Miniature preview (front side) */}
+      {/* Miniature preview */}
       <div className="flex items-center justify-center bg-gray-50 py-4 px-3 overflow-hidden">
         <div style={{ width: previewWidth, height: PREVIEW_HEIGHT, flexShrink: 0 }}>
-          <RackCanvas rack={rack} side="front" scale={previewScale} />
+          <RackCanvas rack={rack} scale={previewScale} />
         </div>
       </div>
 
       {/* Footer */}
       <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
         <span className="text-xs text-gray-500">
-          V: {rack.frontPaintings.length} · A: {rack.backPaintings.length}
+          {totalPaintings} schilderijen geplaatst
         </span>
         <button
           className="text-xs text-blue-600 font-medium group-hover:underline"

@@ -69,12 +69,12 @@ export function Dashboard({ assignmentResult, onSelectRack }: DashboardProps) {
   }
 
 
-  const usedCount   = racks.filter((r) => r.frontPaintings.length + r.backPaintings.length > 0).length;
+  const usedCount   = racks.filter((r) => r.paintings.length > 0).length;
   const unusedCount = racks.length - usedCount;
 
   // 1. Usage filter
   const usageFiltered = racks.filter((rack) => {
-    const hasItems = rack.frontPaintings.length + rack.backPaintings.length > 0;
+    const hasItems = rack.paintings.length > 0;
     if (usageFilter === 'used')   return hasItems;
     if (usageFilter === 'unused') return !hasItems;
     return true;
