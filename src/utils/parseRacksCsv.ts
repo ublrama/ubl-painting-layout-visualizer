@@ -12,7 +12,7 @@ interface CsvRow {
  * Nummer;Type
  *
  * Joins with rack types by type ID.
- * Returns Rack[] with empty frontPaintings and backPaintings.
+ * Returns Rack[] with an empty paintings array.
  */
 export function parseRacksCsv(csvText: string, rackTypes: RackType[]): Rack[] {
   const result = Papa.parse<CsvRow>(csvText, {
@@ -30,7 +30,7 @@ export function parseRacksCsv(csvText: string, rackTypes: RackType[]): Rack[] {
     if (!name || isNaN(typeId)) continue;
     const rackType = typeMap.get(typeId);
     if (!rackType) continue;
-    racks.push({ name, rackType, frontPaintings: [], backPaintings: [] });
+    racks.push({ name, rackType, paintings: [] });
   }
   return racks;
 }

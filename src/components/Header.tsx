@@ -22,7 +22,7 @@ export function Header({
 }: HeaderProps) {
   const totalPaintings = assignmentResult
     ? assignmentResult.racks.reduce(
-        (sum, r) => sum + r.frontPaintings.length + r.backPaintings.length,
+        (sum, r) => sum + r.paintings.length,
         0,
       )
     : 0;
