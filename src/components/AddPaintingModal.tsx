@@ -70,11 +70,7 @@ export function AddPaintingModal({
 
   async function handleForcePlacement(rackName: string) {
     setForceRack(rackName);
-    const p = new URLSearchParams({ targetRack: rackName });
-    // We don't have a paintingId yet (painting not yet saved), so use dimensions
-    p.set('width', width);
-    p.set('height', height);
-    p.set('depth', depth);
+    const p = new URLSearchParams({ targetRack: rackName, width, height, depth });
     const res = await fetch(`/api/suggest-rack?${p}`);
     if (res.ok) {
       const data = await res.json();

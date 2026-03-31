@@ -1,6 +1,9 @@
 /**
  * Shared placement algorithm used by both API routes and frontend.
  * Duplicated here since API routes can't import from src/ in Vercel's build.
+ *
+ * MAINTENANCE: Keep this file in sync with src/utils/assignPaintingsToRacks.ts.
+ * Any changes to the placement logic must be applied to both files.
  */
 
 import type { Painting, Rack, PlacedPainting, AssignmentResult } from '../../src/types';

@@ -8,9 +8,9 @@
  *   Returns ForcePlacementResult with move suggestions to free space.
  */
 
-import type { Painting, PlacedPainting, RackSuggestion, ForcePlacementResult, MoveSuggestion } from '../src/types';
+import type { Painting, RackSuggestion, ForcePlacementResult, MoveSuggestion } from '../src/types';
 import { getAssignment, getPaintings } from './_lib/store';
-import { buildShelfState, tryPlace, PADDING } from './_lib/placement';
+import { buildShelfState, tryPlace } from './_lib/placement';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -64,11 +64,7 @@ export default async function handler(req: Request): Promise<Response> {
     for (const rackPainting of rack.paintings) {
       // Try placing the target painting assuming this one is removed
       const remaining = rack.paintings.filter((p) => p.id !== rackPainting.id) as Painting[];
-      const testState = buildShelfState([]);
-      testState.currentX = PADDING;
-      testState.currentY = PADDING;
-      const tempRackPaintings: PlacedPainting[] = [];
-      const testShelf = { currentX: PADDING, currentY: PADDING, shelfHeight: 0, paintings: tempRackPaintings };
+      const testShelf = buildShelfState([]);
       for (const p of remaining) {
         tryPlace(p, testShelf, rack.rackType.width, rack.rackType.height);
       }
