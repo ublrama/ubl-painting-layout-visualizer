@@ -27,7 +27,7 @@ export function RackCanvas({ rack, side, scale }: RackCanvasProps) {
           backgroundColor: '#f9fafb',
           border: '2px solid #d1d5db',
           borderRadius: 4,
-          overflow: 'visible',
+          overflow: 'hidden',
           flexShrink: 0,
         }}
       >
@@ -36,7 +36,6 @@ export function RackCanvas({ rack, side, scale }: RackCanvasProps) {
             key={p.signatuur}
             painting={p}
             scale={scale}
-            containerRef={containerRef}
           />
         ))}
       </div>

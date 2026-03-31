@@ -18,8 +18,11 @@ function tryPlace(
   rackWidth: number,
   rackHeight: number,
 ): boolean {
-  // Try current shelf first
-  if (shelfState.currentX + painting.width + PADDING <= rackWidth) {
+  // Try current shelf first — must fit both horizontally and vertically within the rack
+  if (
+    shelfState.currentX + painting.width + PADDING <= rackWidth &&
+    shelfState.currentY + painting.height + PADDING <= rackHeight
+  ) {
     shelfState.paintings.push({ ...painting, x: shelfState.currentX, y: shelfState.currentY });
     shelfState.currentX += painting.width + PADDING;
     if (painting.height + PADDING > shelfState.shelfHeight) {
