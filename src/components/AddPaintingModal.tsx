@@ -89,6 +89,7 @@ export function AddPaintingModal({
         height: parseFloat(height) || 0,
         depth:  parseFloat(depth)  || 0,
         assignedRackName: rackName,
+        predefinedRack: null,
       });
     } catch (e) {
       setError(String(e));
