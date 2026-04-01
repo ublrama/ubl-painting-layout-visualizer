@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { AssignmentResult, Painting } from '../types';
 import { COLLECTION_COLORS } from '../constants';
 import { usePaintings } from '../hooks/usePaintings';
+import { AddPaintingModal } from './AddPaintingModal';
 
 type AssignedFilter = 'all' | 'assigned' | 'unassigned';
 type SortField = 'signatuur' | 'width' | 'height' | 'depth' | 'collection';
@@ -10,14 +11,16 @@ interface PaintingsListProps {
   assignmentResult: AssignmentResult | null;
   isConfirmed?: boolean;
   onSelectRack?: (rackIndex: number) => void;
+  onAddPainting?: (data: Omit<Painting, 'id' | 'manuallyPlaced'>) => Promise<void>;
 }
 
-export function PaintingsList({ assignmentResult, onSelectRack }: PaintingsListProps) {
+export function PaintingsList({ assignmentResult, isConfirmed, onSelectRack, onAddPainting }: PaintingsListProps) {
   const [search,           setSearch]       = useState('');
   const [assignedFilter,   setAssignedFilter] = useState<AssignedFilter>('all');
   const [collectionFilter, setCollFilter]   = useState('');
   const [sortField,        setSortField]    = useState<SortField>('signatuur');
   const [sortOrder,        setSortOrder]    = useState<'asc' | 'desc'>('asc');
+  const [showAdd,          setShowAdd]      = useState(false);
 
   const assignedParam =
     assignedFilter === 'assigned'   ? 'true'  :
@@ -59,6 +62,15 @@ export function PaintingsList({ assignmentResult, onSelectRack }: PaintingsListP
             {unassignedCount > 0 && `, ${unassignedCount} niet toegewezen`})
           </span>
         </h2>
+        {onAddPainting && (
+          <button
+            type="button"
+            onClick={() => setShowAdd(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors self-start sm:self-auto"
+          >
+            + Schilderij toevoegen
+          </button>
+        )}
       </div>
 
       {/* Filter bar */}
@@ -195,6 +207,17 @@ export function PaintingsList({ assignmentResult, onSelectRack }: PaintingsListP
           </tbody>
         </table>
       </div>
+
+      {showAdd && onAddPainting && (
+        <AddPaintingModal
+          isConfirmed={isConfirmed}
+          onSave={async (data) => {
+            await onAddPainting(data);
+            setShowAdd(false);
+          }}
+          onCancel={() => setShowAdd(false)}
+        />
+      )}
     </div>
   );
 }

@@ -265,9 +265,9 @@ export function Dashboard({ assignmentResult, onSelectRack, onSwitchToPaintings 
           type="button"
           onClick={onSwitchToPaintings}
           className="fixed bottom-8 right-8 flex items-center gap-2 px-5 py-3 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-lg transition-colors z-20"
-          title="Schilderij toevoegen"
+          title="Schilderijen bekijken"
         >
-          + Schilderij toevoegen
+          🖼️ Schilderijen bekijken
         </button>
       )}
     </div>

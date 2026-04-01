@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { ChangeEvent } from 'react';
-import type { RackType, Rack, AssignmentResult } from './types';
+import type { RackType, Rack, Painting, AssignmentResult } from './types';
 import { parsePaintingsCsv } from './utils/parsePaintingsCsv';
 import { parseRackTypesCsv } from './utils/parseRackTypesCsv';
 import { parseRacksCsv } from './utils/parseRacksCsv';
@@ -139,6 +139,20 @@ export default function App() {
     setView({ kind: 'detail', rackIndex: index });
   }
 
+  async function handleAddPainting(data: Omit<Painting, 'id' | 'manuallyPlaced'>) {
+    const newPainting: Painting = { ...data, id: `manual-${Date.now()}`, manuallyPlaced: false };
+    setLocalAssignment((prev) => {
+      if (!prev) return prev;
+      const allPaintings: Painting[] = [
+        ...prev.racks.flatMap((r) => r.paintings),
+        ...prev.unassigned,
+        newPainting,
+      ];
+      const emptyRacks = prev.racks.map((r) => ({ ...r, paintings: [] }));
+      return assignPaintingsToRacks(allPaintings, emptyRacks);
+    });
+  }
+
   async function handleConfirm() {
     await confirmAssignment();
     const now = new Date().toISOString();
@@ -204,6 +218,7 @@ export default function App() {
             <PaintingsList
               assignmentResult={assignmentResult}
               isConfirmed={isConfirmed}
+              onAddPainting={handleAddPainting}
               onSelectRack={(index) => {
                 setActiveTab('racks');
                 goToRack(index);
