@@ -5,13 +5,14 @@
  */
 
 import type { Painting, PlacedPainting } from '../../src/types';
-import { getPaintings, setPaintings, getAssignment, setAssignment } from '../_lib/store';
+import { getPaintings, upsertPainting, deletePainting, getAssignment, setAssignment } from '../_lib/store';
 import { buildShelfState, tryPlace, assignPaintingsToRacks } from '../_lib/placement';
+import { verifyClerkToken, unauthorized } from '../_lib/auth';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
 export default async function handler(req: Request): Promise<Response> {
@@ -38,6 +39,9 @@ export default async function handler(req: Request): Promise<Response> {
 
   // ── PUT ──────────────────────────────────────────────────────────────────
   if (req.method === 'PUT') {
+    const auth = await verifyClerkToken(req);
+    if (!auth) return unauthorized();
+
     let body: Partial<Painting>;
     try {
       body = await req.json();
@@ -53,8 +57,7 @@ export default async function handler(req: Request): Promise<Response> {
 
     const oldPainting   = paintings[idx];
     const updatedPainting: Painting = { ...oldPainting, ...body, id };
-    paintings[idx]      = updatedPainting;
-    await setPaintings(paintings);
+    await upsertPainting(updatedPainting);
 
     // Update assignment if rack changed
     const assignment = await getAssignment();
@@ -98,36 +101,32 @@ export default async function handler(req: Request): Promise<Response> {
 
   // ── DELETE ───────────────────────────────────────────────────────────────
   if (req.method === 'DELETE') {
+    const auth = await verifyClerkToken(req);
+    if (!auth) return unauthorized();
+
     const paintings = await getPaintings();
     const painting  = paintings.find((p) => p.id === id);
     if (!painting) {
       return Response.json({ error: 'Not found' }, { status: 404, headers: CORS_HEADERS });
     }
 
-    // Remove from paintings list
-    await setPaintings(paintings.filter((p) => p.id !== id));
+    await deletePainting(id); // cascade deletes placed_paintings row too
 
-    // Remove from assignment
+    // Rebuild assignment for the rack this painting was on
     const assignment = await getAssignment();
     let freedSpace: { rackName: string; width: number; height: number } | null = null;
 
-    if (assignment) {
-      assignment.unassigned = assignment.unassigned.filter((p) => p.id !== id);
-
-      for (const rack of assignment.racks) {
-        const beforeCount = rack.paintings.length;
-        rack.paintings    = rack.paintings.filter((p) => p.id !== id);
-        if (rack.paintings.length < beforeCount) {
-          freedSpace = { rackName: rack.name, width: painting.width, height: painting.height };
-          // Rebuild placement for rack to recalculate x,y
-          const remaining = rack.paintings.map((p) => ({ ...p })) as Painting[];
-          rack.paintings  = [];
-          const rebuilt   = assignPaintingsToRacks(remaining, [{ ...rack }]);
-          rack.paintings  = rebuilt.racks[0]?.paintings ?? [];
-          break;
-        }
+    if (assignment && painting.assignedRackName) {
+      freedSpace = { rackName: painting.assignedRackName, width: painting.width, height: painting.height };
+      // Rebuild placement for rack to recalculate x,y
+      const rack = assignment.racks.find((r) => r.name === painting.assignedRackName);
+      if (rack) {
+        const remaining = rack.paintings.filter((p) => p.id !== id) as Painting[];
+        rack.paintings = [];
+        const rebuilt = assignPaintingsToRacks(remaining, [{ ...rack }]);
+        rack.paintings = rebuilt.racks[0]?.paintings ?? [];
+        await setAssignment(assignment);
       }
-      await setAssignment(assignment);
     }
 
     return Response.json({ ok: true, freedSpace }, { headers: CORS_HEADERS });

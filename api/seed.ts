@@ -7,11 +7,12 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
+import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import type { Painting, RackType, Rack } from '../src/types';
 import { assignPaintingsToRacks } from './_lib/placement';
-import { setPaintings, setRacks, setAssignment } from './_lib/store';
+import { setRacks, setAssignment } from './_lib/store';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -111,6 +112,16 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   try {
+    // Clear existing data to allow re-seeding.
+    // Supabase requires a WHERE clause for DELETE; .neq() with a value that no
+    // real row can have effectively means "delete all rows".
+    const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
+    await supabase.from('placed_paintings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('paintings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('racks').delete().neq('name', '');        // delete all rows (name is never empty)
+    await supabase.from('rack_types').delete().neq('id', 0);      // delete all rows (type id starts at 1)
+    await supabase.from('assignment_state').upsert({ id: 1, confirmed_at: null }, { onConflict: 'id' });
+
     const publicDir = join(process.cwd(), 'public');
     const paintingsCsv  = readFileSync(join(publicDir, 'demo-paintings.csv'), 'utf-8');
     const rackTypesCsv  = readFileSync(join(publicDir, 'demo-rack-types.csv'), 'utf-8');
@@ -126,6 +137,7 @@ export default async function handler(req: Request): Promise<Response> {
       id: uuidv4(),
       assignedRackName: null,
       manuallyPlaced: false,
+      predefinedRack: null,
     }));
 
     // Run assignment algorithm
@@ -141,12 +153,15 @@ export default async function handler(req: Request): Promise<Response> {
       }
     }
 
-    // Persist
-    await Promise.all([
-      setPaintings(paintings),
-      setRacks(emptyRacks),
-      setAssignment(assignment),
-    ]);
+    // Persist racks first (setRacks upserts rack_types then racks)
+    await setRacks(emptyRacks);
+    // Upsert all paintings individually
+    const { upsertPainting } = await import('./_lib/store');
+    for (const painting of paintings) {
+      await upsertPainting(painting);
+    }
+    // Persist assignment
+    await setAssignment(assignment);
 
     return Response.json(
       { ok: true, paintingCount: paintings.length, rackCount: emptyRacks.length },

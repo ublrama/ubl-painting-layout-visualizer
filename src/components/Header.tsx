@@ -1,5 +1,6 @@
 import type { ChangeEvent } from 'react';
 import type { AssignmentResult } from '../types';
+import { UserButton, SignedIn } from '@clerk/clerk-react';
 
 interface HeaderProps {
   assignmentResult: AssignmentResult | null;
@@ -103,6 +104,19 @@ export function Header({
           fileName={racksFileName}
           onChange={onRacksChange}
         />
+        {import.meta.env.VITE_CLERK_PUBLISHABLE_KEY && (
+          <SignedIn>
+            <div className="flex items-center gap-2 ml-2 pl-2 border-l border-[#002580]">
+              <UserButton
+                appearance={{
+                  elements: {
+                    avatarBox: 'w-8 h-8',
+                  }
+                }}
+              />
+            </div>
+          </SignedIn>
+        )}
       </div>
     </header>
   );
