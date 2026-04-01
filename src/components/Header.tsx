@@ -1,5 +1,5 @@
 import type { AssignmentResult } from '../types';
-import { UserButton, SignedIn } from '@clerk/clerk-react';
+import { useAuthContext } from '../contexts/AuthContext';
 
 interface HeaderProps {
   assignmentResult: AssignmentResult | null;
@@ -14,6 +14,7 @@ export function Header({
   onConfirm,
   onDatabaseManage,
 }: HeaderProps) {
+  const { user, signOut } = useAuthContext();
   const totalPaintings = assignmentResult
     ? assignmentResult.racks.reduce(
         (sum, r) => sum + r.paintings.length,
@@ -75,8 +76,8 @@ export function Header({
           )
         )}
 
-        {import.meta.env.VITE_CLERK_PUBLISHABLE_KEY && (
-          <SignedIn>
+        {user && (
+          <>
             <button
               type="button"
               onClick={onDatabaseManage}
@@ -86,15 +87,16 @@ export function Header({
               🗄️ <span className="hidden sm:inline">Database</span>
             </button>
             <div className="flex items-center gap-2 ml-2 pl-2 border-l border-[#002580]">
-              <UserButton
-                appearance={{
-                  elements: {
-                    avatarBox: 'w-8 h-8',
-                  }
-                }}
-              />
+              <span className="text-xs text-[#8b9db8] hidden sm:inline">{user.email}</span>
+              <button
+                type="button"
+                onClick={() => signOut?.()}
+                className="text-xs text-[#8b9db8] hover:text-white px-2 py-1 rounded hover:bg-[#002580] transition-colors"
+              >
+                Uitloggen
+              </button>
             </div>
-          </SignedIn>
+          </>
         )}
       </div>
     </header>
