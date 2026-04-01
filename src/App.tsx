@@ -1,6 +1,5 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
-import type { ChangeEvent } from 'react';
-import type { RackType, Rack, Painting, AssignmentResult } from './types';
+import { useState, useEffect, useRef } from 'react';
+import type { RackType, Painting, AssignmentResult } from './types';
 import { parsePaintingsCsv } from './utils/parsePaintingsCsv';
 import { parseRackTypesCsv } from './utils/parseRackTypesCsv';
 import { parseRacksCsv } from './utils/parseRacksCsv';
@@ -12,6 +11,7 @@ import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
 import { RackDetail } from './components/RackDetail';
 import { PaintingsList } from './components/PaintingsList';
+import { DatabasePanel } from './components/DatabasePanel';
 import { SCALE } from './constants';
 
 type View =
@@ -24,14 +24,12 @@ export default function App() {
   const [localAssignment, setLocalAssignment] = useState<AssignmentResult | null>(null);
 
   // SWR-backed assignment (from API)
-  const { assignment: apiAssignment, isLoading: apiLoading, isConfirmed, confirmAssignment } = useAssignment();
+  const { assignment: apiAssignment, isLoading: apiLoading, isConfirmed, confirmAssignment, mutate } = useAssignment();
 
   // Keep a ref to the latest rack types so handlers can access without stale closures
   const rackTypesRef = useRef<RackType[]>([]);
 
-  const [paintingsFileName, setPaintingsFileName] = useState<string | null>(null);
-  const [rackTypesFileName, setRackTypesFileName] = useState<string | null>(null);
-  const [racksFileName, setRacksFileName] = useState<string | null>(null);
+  const [showDatabasePanel, setShowDatabasePanel] = useState(false);
 
   const [view, setView] = useState<View>({ kind: 'dashboard' });
   const [zoom, setZoom] = useState<number>(SCALE);
@@ -58,81 +56,11 @@ export default function App() {
 
         const result = assignPaintingsToRacks(demoPaintings, demoRacks);
         setLocalAssignment(result);
-        setPaintingsFileName('demo-paintings.csv');
-        setRackTypesFileName('demo-rack-types.csv');
-        setRacksFileName('demo-racks.csv');
       })
       .catch(() => {
         // Demo files not available — show empty state
       });
   }, [apiLoading, apiAssignment]);
-
-  // Re-run assignment when CSV-loaded paintings/racks change — but ONLY if not confirmed
-  const handlePaintingsChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
-    if (isConfirmed) return; // don't re-run if confirmed
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setPaintingsFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const text = ev.target?.result;
-      if (typeof text !== 'string') return;
-      const newPaintings = parsePaintingsCsv(text);
-      // Update local assignment using current racks
-      setLocalAssignment((prev) => {
-        if (!prev) return null;
-        // Rebuild from scratch
-        const racks: Rack[] = prev.racks.map((r) => ({ ...r, paintings: [] }));
-        return assignPaintingsToRacks(newPaintings, racks);
-      });
-    };
-    reader.readAsText(file);
-  }, [isConfirmed]);
-
-  const handleRackTypesChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setRackTypesFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const text = ev.target?.result;
-      if (typeof text !== 'string') return;
-      const newRackTypes = parseRackTypesCsv(text);
-      rackTypesRef.current = newRackTypes;
-      setLocalAssignment((prev) => {
-        if (!prev) return prev;
-        const typeMap = new Map<number, RackType>(newRackTypes.map((rt) => [rt.id, rt]));
-        return {
-          ...prev,
-          racks: prev.racks.map((r) => ({
-            ...r,
-            rackType: typeMap.get(r.rackType.id) ?? r.rackType,
-          })),
-        };
-      });
-    };
-    reader.readAsText(file);
-  }, []);
-
-  const handleRacksChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
-    if (isConfirmed) return;
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setRacksFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const text = ev.target?.result;
-      if (typeof text !== 'string') return;
-      const newRacks = parseRacksCsv(text, rackTypesRef.current);
-      setLocalAssignment((prev) => {
-        const paintings = prev
-          ? [...prev.racks.flatMap((r) => r.paintings), ...prev.unassigned]
-          : [];
-        return assignPaintingsToRacks(paintings, newRacks);
-      });
-    };
-    reader.readAsText(file);
-  }, [isConfirmed]);
 
   const currentRackIndex = view.kind === 'detail' ? view.rackIndex : 0;
 
@@ -170,14 +98,9 @@ export default function App() {
       <div className="min-h-screen bg-white font-sans flex flex-col">
       <Header
         assignmentResult={assignmentResult}
-        paintingsFileName={paintingsFileName}
-        rackTypesFileName={rackTypesFileName}
-        racksFileName={racksFileName}
         isConfirmed={isConfirmed}
-        onPaintingsChange={handlePaintingsChange}
-        onRackTypesChange={handleRackTypesChange}
-        onRacksChange={handleRacksChange}
         onConfirm={handleConfirm}
+        onDatabaseManage={() => setShowDatabasePanel(true)}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -252,6 +175,12 @@ export default function App() {
           )}
         </main>
       </div>
+      {showDatabasePanel && (
+        <DatabasePanel
+          onClose={() => setShowDatabasePanel(false)}
+          onSeedComplete={() => { void mutate(); }}
+        />
+      )}
     </div>
     </AuthGuard>
   );
