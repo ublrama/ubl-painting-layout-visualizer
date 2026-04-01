@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import type { AssignmentResult, Rack, RackType } from '../types';
 import { RackCard } from './RackCard';
+import { AddRackModal } from './AddRackModal';
 
 type UsageFilter = 'all' | 'used' | 'unused';
 type SortDir     = 'asc' | 'desc';
@@ -27,14 +28,17 @@ interface DashboardProps {
   assignmentResult: AssignmentResult | null;
   onSelectRack: (index: number) => void;
   onSwitchToPaintings?: () => void;
+  onAddRack?: (name: string, rackTypeId: number) => Promise<void>;
+  onDeleteRack?: (rackName: string) => Promise<void>;
 }
 
-export function Dashboard({ assignmentResult, onSelectRack, onSwitchToPaintings }: DashboardProps) {
+export function Dashboard({ assignmentResult, onSelectRack, onSwitchToPaintings, onAddRack, onDeleteRack }: DashboardProps) {
   // ── All hooks must be called unconditionally before any early return ──
   const [usageFilter,    setUsageFilter]    = useState<UsageFilter>('used');
   const [sortDir,        setSortDir]        = useState<SortDir>('asc');
   const [typeFilter,     setTypeFilter]     = useState<number | null>(null);
   const [paintingSearch, setPaintingSearch] = useState('');
+  const [showAddRack,    setShowAddRack]    = useState(false);
 
   const racks      = assignmentResult?.racks     ?? [];
   const unassigned = assignmentResult?.unassigned ?? [];
@@ -224,6 +228,20 @@ export function Dashboard({ assignmentResult, onSelectRack, onSwitchToPaintings 
             </button>
           )}
         </div>
+
+        {/* Add rack button */}
+        {onAddRack && (
+          <>
+            <div className="h-5 w-px bg-gray-200" />
+            <button
+              type="button"
+              onClick={() => setShowAddRack(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium transition-colors whitespace-nowrap"
+            >
+              + Rek toevoegen
+            </button>
+          </>
+        )}
       </div>
 
       {/* ── Grid ── */}
@@ -249,6 +267,16 @@ export function Dashboard({ assignmentResult, onSelectRack, onSwitchToPaintings 
                     {matchedPaintings.length} match{matchedPaintings.length > 1 ? 'es' : ''}
                   </div>
                 )}
+                {onDeleteRack && rack.paintings.length === 0 && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); if (confirm(`Rek "${rack.name}" verwijderen?`)) onDeleteRack(rack.name); }}
+                    className="absolute -top-2 -left-2 z-10 bg-red-500 hover:bg-red-600 text-white text-[10px] font-bold w-5 h-5 rounded-full shadow flex items-center justify-center"
+                    title="Rek verwijderen"
+                  >
+                    ✕
+                  </button>
+                )}
                 <RackCard
                   rack={rack}
                   onSelect={() => onSelectRack(originalIndex)}
@@ -269,6 +297,18 @@ export function Dashboard({ assignmentResult, onSelectRack, onSwitchToPaintings 
         >
           🖼️ Schilderijen bekijken
         </button>
+      )}
+
+      {/* Add rack modal */}
+      {showAddRack && onAddRack && (
+        <AddRackModal
+          rackTypes={rackTypes}
+          onSave={async (name, rackTypeId) => {
+            await onAddRack(name, rackTypeId);
+            setShowAddRack(false);
+          }}
+          onCancel={() => setShowAddRack(false)}
+        />
       )}
     </div>
   );
