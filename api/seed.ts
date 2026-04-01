@@ -1,10 +1,13 @@
 /**
  * POST /api/seed
  * One-time seeding endpoint. Reads CSV files, parses them, runs assignment,
- * and stores the result in KV.
+ * and stores the result in Supabase.
  *
- * Protected by SEED_SECRET header.
+ * Protected by Clerk JWT verification.
+ * Supports multipart/form-data with optional file fields: paintings, rackTypes, racks.
  */
+
+export const maxDuration = 30;
 
 import { v4 as uuidv4 } from 'uuid';
 import { createClient } from '@supabase/supabase-js';
@@ -13,11 +16,12 @@ import { join } from 'path';
 import type { Painting, RackType, Rack } from '../src/types';
 import { assignPaintingsToRacks } from './_lib/placement';
 import { setRacks, setAssignment } from './_lib/store';
+import { verifyClerkToken, unauthorized } from './_lib/auth';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, x-seed-secret',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
 // ── CSV parsing helpers (inline, no PapaParse in API routes) ─────────────────
@@ -102,30 +106,44 @@ export default async function handler(req: Request): Promise<Response> {
     return Response.json({ error: 'Method not allowed' }, { status: 405, headers: CORS_HEADERS });
   }
 
-  // Check seed secret if configured
-  const seedSecret = process.env.SEED_SECRET;
-  if (seedSecret) {
-    const provided = req.headers.get('x-seed-secret');
-    if (provided !== seedSecret) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401, headers: CORS_HEADERS });
-    }
-  }
+  // Require Clerk JWT authentication
+  const auth = await verifyClerkToken(req);
+  if (!auth) return unauthorized();
 
   try {
     // Clear existing data to allow re-seeding.
     // Supabase requires a WHERE clause for DELETE; .neq() with a value that no
     // real row can have effectively means "delete all rows".
-    const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
-    await supabase.from('placed_paintings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    await supabase.from('paintings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    await supabase.from('racks').delete().neq('name', '');        // delete all rows (name is never empty)
-    await supabase.from('rack_types').delete().neq('id', 0);      // delete all rows (type id starts at 1)
-    await supabase.from('assignment_state').upsert({ id: 1, confirmed_at: null }, { onConflict: 'id' });
+    const supabaseClient = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
+    await supabaseClient.from('placed_paintings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabaseClient.from('paintings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabaseClient.from('racks').delete().neq('name', '');        // delete all rows (name is never empty)
+    await supabaseClient.from('rack_types').delete().neq('id', 0);      // delete all rows (type id starts at 1)
+    await supabaseClient.from('assignment_state').upsert({ id: 1, confirmed_at: null }, { onConflict: 'id' });
 
     const publicDir = join(process.cwd(), 'public');
-    const paintingsCsv  = readFileSync(join(publicDir, 'demo-paintings.csv'), 'utf-8');
-    const rackTypesCsv  = readFileSync(join(publicDir, 'demo-rack-types.csv'), 'utf-8');
-    const racksCsv      = readFileSync(join(publicDir, 'demo-racks.csv'), 'utf-8');
+    let paintingsCsv: string;
+    let rackTypesCsv: string;
+    let racksCsv: string;
+
+    const contentType = req.headers.get('content-type') ?? '';
+    if (contentType.includes('multipart/form-data')) {
+      const formData = await req.formData();
+      const paintingsBlob = formData.get('paintings') as File | null;
+      const rackTypesBlob = formData.get('rackTypes') as File | null;
+      const racksBlob = formData.get('racks') as File | null;
+
+      if (!paintingsBlob) {
+        return Response.json({ error: 'Missing paintings file' }, { status: 400, headers: CORS_HEADERS });
+      }
+      paintingsCsv = await paintingsBlob.text();
+      rackTypesCsv = rackTypesBlob ? await rackTypesBlob.text() : readFileSync(join(publicDir, 'demo-rack-types.csv'), 'utf-8');
+      racksCsv = racksBlob ? await racksBlob.text() : readFileSync(join(publicDir, 'demo-racks.csv'), 'utf-8');
+    } else {
+      paintingsCsv = readFileSync(join(publicDir, 'demo-paintings.csv'), 'utf-8');
+      rackTypesCsv = readFileSync(join(publicDir, 'demo-rack-types.csv'), 'utf-8');
+      racksCsv = readFileSync(join(publicDir, 'demo-racks.csv'), 'utf-8');
+    }
 
     const rawPaintings  = parsePaintings(paintingsCsv);
     const rackTypes     = parseRackTypes(rackTypesCsv);
@@ -155,12 +173,25 @@ export default async function handler(req: Request): Promise<Response> {
 
     // Persist racks first (setRacks upserts rack_types then racks)
     await setRacks(emptyRacks);
-    // Upsert all paintings individually
-    const { upsertPainting } = await import('./_lib/store');
-    for (const painting of paintings) {
-      await upsertPainting(painting);
-    }
-    // Persist assignment
+
+    // Bulk upsert all paintings in one call (avoids per-row timeout)
+    const paintingRows = paintings.map((p) => ({
+      id: p.id,
+      signatuur: p.signatuur,
+      collection: p.collection,
+      width: p.width,
+      height: p.height,
+      depth: p.depth,
+      assigned_rack_name: p.assignedRackName,
+      manually_placed: p.manuallyPlaced,
+      predefined_rack: p.predefinedRack ?? null,
+    }));
+    const { error: paintingsError } = await supabaseClient
+      .from('paintings')
+      .upsert(paintingRows, { onConflict: 'id' });
+    if (paintingsError) throw paintingsError;
+
+    // Persist assignment (placed_paintings + assignment_state)
     await setAssignment(assignment);
 
     return Response.json(

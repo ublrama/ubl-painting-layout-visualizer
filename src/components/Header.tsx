@@ -1,30 +1,20 @@
-import type { ChangeEvent } from 'react';
 import type { AssignmentResult } from '../types';
-import { UserButton, SignedIn } from '@clerk/clerk-react';
+import { useAuthContext } from '../contexts/AuthContext';
 
 interface HeaderProps {
   assignmentResult: AssignmentResult | null;
-  paintingsFileName: string | null;
-  rackTypesFileName: string | null;
-  racksFileName: string | null;
   isConfirmed?: boolean;
-  onPaintingsChange: (e: ChangeEvent<HTMLInputElement>) => void;
-  onRackTypesChange: (e: ChangeEvent<HTMLInputElement>) => void;
-  onRacksChange: (e: ChangeEvent<HTMLInputElement>) => void;
   onConfirm?: () => Promise<void>;
+  onDatabaseManage: () => void;
 }
 
 export function Header({
   assignmentResult,
-  paintingsFileName,
-  rackTypesFileName,
-  racksFileName,
   isConfirmed,
-  onPaintingsChange,
-  onRackTypesChange,
-  onRacksChange,
   onConfirm,
+  onDatabaseManage,
 }: HeaderProps) {
+  const { user, signOut } = useAuthContext();
   const totalPaintings = assignmentResult
     ? assignmentResult.racks.reduce(
         (sum, r) => sum + r.paintings.length,
@@ -60,7 +50,7 @@ export function Header({
         )}
       </div>
 
-      {/* Right: Confirmation + Upload buttons */}
+      {/* Right: Confirmation + Database button */}
       <div className="flex items-center gap-2 flex-wrap">
         {/* Confirmation status */}
         {assignmentResult && (
@@ -86,56 +76,29 @@ export function Header({
           )
         )}
 
-        <UploadButton
-          icon="📂"
-          label="Schilderijen"
-          fileName={paintingsFileName}
-          onChange={onPaintingsChange}
-        />
-        <UploadButton
-          icon="🗂️"
-          label="Rektypen"
-          fileName={rackTypesFileName}
-          onChange={onRackTypesChange}
-        />
-        <UploadButton
-          icon="📋"
-          label="Rekken"
-          fileName={racksFileName}
-          onChange={onRacksChange}
-        />
-        {import.meta.env.VITE_CLERK_PUBLISHABLE_KEY && (
-          <SignedIn>
+        {user && (
+          <>
+            <button
+              type="button"
+              onClick={onDatabaseManage}
+              title="Database beheer"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#002580] hover:bg-[#001158] text-white font-semibold text-xs cursor-pointer transition-colors border border-[#003580]"
+            >
+              🗄️ <span className="hidden sm:inline">Database</span>
+            </button>
             <div className="flex items-center gap-2 ml-2 pl-2 border-l border-[#002580]">
-              <UserButton
-                appearance={{
-                  elements: {
-                    avatarBox: 'w-8 h-8',
-                  }
-                }}
-              />
+              <span className="text-xs text-[#8b9db8] hidden sm:inline">{user.email}</span>
+              <button
+                type="button"
+                onClick={() => signOut?.()}
+                className="text-xs text-[#8b9db8] hover:text-white px-2 py-1 rounded hover:bg-[#002580] transition-colors"
+              >
+                Uitloggen
+              </button>
             </div>
-          </SignedIn>
+          </>
         )}
       </div>
     </header>
-  );
-}
-
-interface UploadButtonProps {
-  icon: string;
-  label: string;
-  fileName: string | null;
-  onChange: (e: ChangeEvent<HTMLInputElement>) => void;
-}
-
-function UploadButton({ icon, label, fileName, onChange }: UploadButtonProps) {
-  return (
-    <label className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#be1908] hover:bg-[#d42010] text-white font-semibold text-xs cursor-pointer transition-colors">
-      <span>{icon}</span>
-      <span className="hidden sm:inline">{fileName ?? label}</span>
-      <span className="sm:hidden">{label.slice(0, 3)}</span>
-      <input type="file" accept=".csv" className="hidden" onChange={onChange} />
-    </label>
   );
 }
