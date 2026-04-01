@@ -1,38 +1,14 @@
-import useSWR from 'swr';
 import type { AssignmentResult } from '../types';
 
-const fetcher = (url: string) =>
-  fetch(url).then((r) => (r.ok ? r.json() : null));
-
+/** Stub – no backend exists, so the API always returns nothing. */
 export function useAssignment() {
-  const { data, error, isLoading, mutate } = useSWR<AssignmentResult | null>(
-    '/api/assignment',
-    fetcher,
-  );
-
-  const isConfirmed = !!data?.confirmedAt;
-
-  async function confirmAssignment() {
-    const res = await fetch('/api/assignment/confirm', { method: 'POST' });
-    if (!res.ok) throw new Error(await res.text());
-    await mutate();
-    return res.json() as Promise<AssignmentResult>;
-  }
-
-  async function resetAssignment() {
-    const res = await fetch('/api/assignment/reset', { method: 'POST' });
-    if (!res.ok) throw new Error(await res.text());
-    await mutate();
-    return res.json() as Promise<AssignmentResult>;
-  }
-
   return {
-    assignment: data ?? null,
-    isLoading,
-    error,
-    isConfirmed,
-    confirmAssignment,
-    resetAssignment,
-    mutate,
+    assignment:          null as AssignmentResult | null,
+    isLoading:           false,
+    error:               null as unknown,
+    isConfirmed:         false,
+    confirmAssignment:   async (): Promise<AssignmentResult> => { throw new Error('No API'); },
+    resetAssignment:     async (): Promise<AssignmentResult> => { throw new Error('No API'); },
+    mutate:              async () => {},
   };
 }

@@ -195,7 +195,7 @@ export default function App() {
           </div>
 
           {activeTab === 'paintings' ? (
-            <PaintingsList isConfirmed={isConfirmed} />
+            <PaintingsList assignmentResult={assignmentResult} isConfirmed={isConfirmed} />
           ) : view.kind === 'dashboard' ? (
             <Dashboard
               assignmentResult={assignmentResult}

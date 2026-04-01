@@ -1,7 +1,5 @@
-import useSWR from 'swr';
+import { useState, useEffect, useCallback } from 'react';
 import type { Rack } from '../types';
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 interface RackWithInfo extends Rack {
   paintingCount: number;
@@ -11,10 +9,29 @@ interface RackWithInfo extends Rack {
 }
 
 export function useRacks() {
-  const { data, error, isLoading, mutate } = useSWR<RackWithInfo[]>('/api/racks', fetcher);
+  const [data, setData] = useState<RackWithInfo[] | undefined>(undefined);
+  const [error, setError] = useState<unknown>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const mutate = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const r = await fetch('/api/racks');
+      const d = (await r.json()) as RackWithInfo[];
+      setData(d);
+    } catch (e) {
+      setError(e);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void mutate();
+  }, [mutate]);
 
   return {
-    racks: data ?? [],
+    racks: data ?? ([] as RackWithInfo[]),
     isLoading,
     error,
     mutate,

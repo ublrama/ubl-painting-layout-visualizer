@@ -1,8 +1,5 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import type { Painting, FillSuggestion } from '../types';
-import useSWR from 'swr';
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 interface RemovePaintingDialogProps {
   painting: Painting;
@@ -24,7 +21,14 @@ export function RemovePaintingDialog({
     ? `/api/fill-suggestions?rackName=${encodeURIComponent(rackName)}&removedPaintingWidth=${painting.width}&removedPaintingHeight=${painting.height}`
     : null;
 
-  const { data: suggestions } = useSWR<FillSuggestion[]>(suggestionsKey, fetcher);
+  const [suggestions, setSuggestions] = useState<FillSuggestion[] | undefined>(undefined);
+  useEffect(() => {
+    if (!suggestionsKey) { setSuggestions(undefined); return; }
+    fetch(suggestionsKey)
+      .then((r) => r.json() as Promise<FillSuggestion[]>)
+      .then(setSuggestions)
+      .catch(() => setSuggestions(undefined));
+  }, [suggestionsKey]);
 
   // Prevent background scroll
   useEffect(() => {

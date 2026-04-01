@@ -1,7 +1,5 @@
-import useSWR from 'swr';
+import { useState, useEffect } from 'react';
 import type { RackSuggestion, ForcePlacementResult } from '../types';
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 interface AutoSuggestParams {
   width: number;
@@ -15,8 +13,11 @@ interface ForcePlaceParams {
 }
 
 export function useRackSuggestions(params: AutoSuggestParams | ForcePlaceParams | null) {
-  let key: string | null = null;
+  const [data,      setData]      = useState<RackSuggestion[] | ForcePlacementResult | undefined>(undefined);
+  const [error,     setError]     = useState<unknown>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
+  let key: string | null = null;
   if (params) {
     const p = new URLSearchParams();
     if ('paintingId' in params) {
@@ -30,10 +31,14 @@ export function useRackSuggestions(params: AutoSuggestParams | ForcePlaceParams 
     key = `/api/suggest-rack?${p.toString()}`;
   }
 
-  const { data, error, isLoading } = useSWR<RackSuggestion[] | ForcePlacementResult>(
-    key,
-    fetcher,
-  );
+  useEffect(() => {
+    if (!key) { setData(undefined); return; }
+    setIsLoading(true);
+    fetch(key)
+      .then((r) => r.json() as Promise<RackSuggestion[] | ForcePlacementResult>)
+      .then((d) => { setData(d); setIsLoading(false); })
+      .catch((e) => { setError(e); setIsLoading(false); });
+  }, [key]);
 
   return { suggestions: data, isLoading, error };
 }
