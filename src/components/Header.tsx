@@ -6,9 +6,11 @@ interface HeaderProps {
   paintingsFileName: string | null;
   rackTypesFileName: string | null;
   racksFileName: string | null;
+  isConfirmed?: boolean;
   onPaintingsChange: (e: ChangeEvent<HTMLInputElement>) => void;
   onRackTypesChange: (e: ChangeEvent<HTMLInputElement>) => void;
   onRacksChange: (e: ChangeEvent<HTMLInputElement>) => void;
+  onConfirm?: () => Promise<void>;
 }
 
 export function Header({
@@ -16,9 +18,11 @@ export function Header({
   paintingsFileName,
   rackTypesFileName,
   racksFileName,
+  isConfirmed,
   onPaintingsChange,
   onRackTypesChange,
   onRacksChange,
+  onConfirm,
 }: HeaderProps) {
   const totalPaintings = assignmentResult
     ? assignmentResult.racks.reduce(
@@ -55,8 +59,32 @@ export function Header({
         )}
       </div>
 
-      {/* Right: Upload buttons */}
+      {/* Right: Confirmation + Upload buttons */}
       <div className="flex items-center gap-2 flex-wrap">
+        {/* Confirmation status */}
+        {assignmentResult && (
+          isConfirmed ? (
+            <span className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-green-600 text-white font-semibold text-xs">
+              ✓ Plaatsing bevestigd
+              {assignmentResult.confirmedAt && (
+                <span className="opacity-75">
+                  — {new Date(assignmentResult.confirmedAt).toLocaleDateString('nl-NL')}
+                </span>
+              )}
+            </span>
+          ) : (
+            onConfirm && (
+              <button
+                type="button"
+                onClick={onConfirm}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-500 hover:bg-blue-400 text-white font-semibold text-xs cursor-pointer transition-colors"
+              >
+                ✓ Bevestig plaatsing
+              </button>
+            )
+          )
+        )}
+
         <UploadButton
           icon="📂"
           label="Schilderijen"

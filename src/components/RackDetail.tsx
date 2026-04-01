@@ -7,6 +7,7 @@ interface RackDetailProps {
   rackIndex: number;
   totalRacks: number;
   zoom: number;
+  isConfirmed?: boolean;
   onBack: () => void;
   onPrev: () => void;
   onNext: () => void;

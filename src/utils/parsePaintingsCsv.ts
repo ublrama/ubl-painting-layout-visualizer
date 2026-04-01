@@ -7,6 +7,7 @@ interface CsvRow {
   'Hoogte (cm)': string;
   'Breedte (cm)': string;
   'Diepte (cm)': string;
+  Rek: string;
   [key: string]: string;
 }
 
@@ -33,6 +34,9 @@ function parseDutchFloat(value: string): number {
  *
  * Skips rows where height or width are missing/NaN.
  * Depth defaults to 0 if empty/missing.
+ *
+ * NOTE: id is derived from signatuur for CSV-loaded paintings (no uuid dependency in browser).
+ * The API seed endpoint generates proper UUIDs.
  */
 export function parsePaintingsCsv(csvText: string): Painting[] {
   const result = Papa.parse<CsvRow>(csvText, {
@@ -59,8 +63,19 @@ export function parsePaintingsCsv(csvText: string): Painting[] {
 
     const depth = depthStr ? parseDutchFloat(depthStr) : 0;
     const collection = getCollection((row.Collectie ?? '').trim());
+    const predefinedRack = (row.Rek ?? '').trim() || null;
 
-    paintings.push({ signatuur, collection, width, height, depth: isNaN(depth) ? 0 : depth });
+    paintings.push({
+      id: signatuur,
+      signatuur,
+      collection,
+      width,
+      height,
+      depth: isNaN(depth) ? 0 : depth,
+      assignedRackName: null,
+      manuallyPlaced: false,
+      predefinedRack,
+    });
   }
   return paintings;
 }

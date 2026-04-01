@@ -1,5 +1,14 @@
-import { PADDING } from '../constants';
-import type { Painting, Rack, PlacedPainting, AssignmentResult } from '../types';
+/**
+ * Shared placement algorithm used by both API routes and frontend.
+ * Duplicated here since API routes can't import from src/ in Vercel's build.
+ *
+ * MAINTENANCE: Keep this file in sync with src/utils/assignPaintingsToRacks.ts.
+ * Any changes to the placement logic must be applied to both files.
+ */
+
+import type { Painting, Rack, PlacedPainting, AssignmentResult } from '../../src/types';
+
+export const PADDING = 5;
 
 interface ShelfState {
   currentX: number;
@@ -12,13 +21,13 @@ interface ShelfState {
  * Try to place a painting onto the given shelf state within the given rack dimensions.
  * Mutates shelfState on success; returns true if placed, false otherwise.
  */
-function tryPlace(
+export function tryPlace(
   painting: Painting,
   shelfState: ShelfState,
   rackWidth: number,
   rackHeight: number,
 ): boolean {
-  // Try current shelf first — must fit both horizontally and vertically within the rack
+  // Try current shelf first
   if (
     shelfState.currentX + painting.width + PADDING <= rackWidth &&
     shelfState.currentY + painting.height + PADDING <= rackHeight
@@ -52,13 +61,11 @@ function tryPlace(
  * Build a ShelfState from an existing list of already-placed paintings,
  * so we can continue packing on that side.
  */
-function buildShelfState(placed: PlacedPainting[]): ShelfState {
+export function buildShelfState(placed: PlacedPainting[]): ShelfState {
   if (placed.length === 0) {
     return { currentX: PADDING, currentY: PADDING, shelfHeight: 0, paintings: placed };
   }
 
-  // Reconstruct the shelf state from the existing placements
-  // Find the bottom-most y and then the rightmost x on that shelf
   const maxY = Math.max(...placed.map((p) => p.y));
   const paintingsOnLastShelf = placed.filter((p) => p.y === maxY);
   const rightmost = paintingsOnLastShelf.reduce(
@@ -75,11 +82,6 @@ function buildShelfState(placed: PlacedPainting[]): ShelfState {
   };
 }
 
-/**
- * Explicit list of priority racks.
- * These are filled first (best-fit depth within the group).
- * All other racks are only used once these are full.
- */
 const PRIORITY_RACKS = new Set<string>([
   'Pos. 2-11a',
   'Pos. 4-12a',
@@ -109,50 +111,14 @@ const PRIORITY_RACKS = new Set<string>([
 
 const isPriorityRack = (name: string) => PRIORITY_RACKS.has(name);
 
-/**
- * Assign paintings to racks using a two-phase strategy:
- *
- * Phase 1 – Predefined racks (CSV "Rek" column):
- *   Paintings that carry a predefinedRack name are placed directly onto that
- *   rack first, regardless of depth/priority ordering.  If the rack doesn't
- *   exist or the painting physically doesn't fit, it falls through to unassigned.
- *
- * Phase 2 – Normal best-fit:
- *   Remaining paintings are sorted by depth ascending and distributed using
- *   the priority-first / best-fit-depth shelf algorithm.
- */
 export function assignPaintingsToRacks(paintings: Painting[], racks: Rack[]): AssignmentResult {
-  // Deep-copy racks so we don't mutate the originals
   const workRacks: Rack[] = racks.map((r) => ({
     ...r,
     paintings: [],
   }));
 
-  const rackByName = new Map<string, Rack>(workRacks.map((r) => [r.name, r]));
-
+  const sorted = [...paintings].sort((a, b) => a.depth - b.depth);
   const unassigned: Painting[] = [];
-
-  // ── Phase 1: paintings with a predefined rack ──────────────────────────────
-  const predefined = paintings.filter((p) => p.predefinedRack !== null);
-  const free       = paintings.filter((p) => p.predefinedRack === null);
-
-  for (const painting of predefined) {
-    const targetRack = rackByName.get(painting.predefinedRack!);
-    if (!targetRack) {
-      unassigned.push(painting);
-      continue;
-    }
-    const { width: rw, height: rh } = targetRack.rackType;
-    const state = buildShelfState(targetRack.paintings);
-    if (tryPlace(painting, state, rw, rh)) {
-      targetRack.paintings = state.paintings;
-    } else {
-      unassigned.push(painting);
-    }
-  }
-
-  // ── Phase 2: remaining paintings – priority-first, best-fit depth ──────────
-  const sorted = [...free].sort((a, b) => a.depth - b.depth);
 
   for (const painting of sorted) {
     const byDepth = (a: Rack, b: Rack) => a.rackType.maxDepth - b.rackType.maxDepth;
@@ -165,7 +131,6 @@ export function assignPaintingsToRacks(paintings: Painting[], racks: Rack[]): As
     let placed = false;
     for (const rack of eligible) {
       const { width: rw, height: rh } = rack.rackType;
-
       const state = buildShelfState(rack.paintings);
       if (tryPlace(painting, state, rw, rh)) {
         rack.paintings = state.paintings;
