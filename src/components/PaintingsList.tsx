@@ -3,6 +3,8 @@ import type { AssignmentResult, Painting } from '../types';
 import { COLLECTION_COLORS } from '../constants';
 import { usePaintings } from '../hooks/usePaintings';
 import { AddPaintingModal } from './AddPaintingModal';
+import { AssignPaintingModal } from './AssignPaintingModal';
+import { getPlacementFailReason, FAIL_REASON_COLORS } from '../utils/getPlacementFailReason';
 
 type AssignedFilter = 'all' | 'assigned' | 'unassigned';
 type SortField = 'signatuur' | 'width' | 'height' | 'depth' | 'collection';
@@ -12,15 +14,19 @@ interface PaintingsListProps {
   isConfirmed?: boolean;
   onSelectRack?: (rackIndex: number) => void;
   onAddPainting?: (data: Omit<Painting, 'id' | 'manuallyPlaced'>) => Promise<void>;
+  onUnassignPainting?: (paintingId: string) => Promise<void>;
+  onAssignPainting?: (paintingId: string, rackName: string) => Promise<void>;
+  onDeletePainting?: (paintingId: string) => Promise<void>;
 }
 
-export function PaintingsList({ assignmentResult, isConfirmed, onSelectRack, onAddPainting }: PaintingsListProps) {
+export function PaintingsList({ assignmentResult, isConfirmed, onSelectRack, onAddPainting, onUnassignPainting, onAssignPainting, onDeletePainting }: PaintingsListProps) {
   const [search,           setSearch]       = useState('');
   const [assignedFilter,   setAssignedFilter] = useState<AssignedFilter>('all');
   const [collectionFilter, setCollFilter]   = useState('');
   const [sortField,        setSortField]    = useState<SortField>('signatuur');
   const [sortOrder,        setSortOrder]    = useState<'asc' | 'desc'>('asc');
   const [showAdd,          setShowAdd]      = useState(false);
+  const [assignTarget,     setAssignTarget] = useState<Painting | null>(null);
 
   const assignedParam =
     assignedFilter === 'assigned'   ? 'true'  :
@@ -146,17 +152,18 @@ export function PaintingsList({ assignmentResult, isConfirmed, onSelectRack, onA
                 </button>
               </th>
               <th className="px-3 py-2 text-left">Rek</th>
+              <th className="px-3 py-2 text-right">Acties</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {isLoading && (
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-gray-500">Laden…</td>
+                <td colSpan={8} className="px-3 py-8 text-center text-gray-500">Laden…</td>
               </tr>
             )}
             {!isLoading && paintings.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-gray-500">
+                <td colSpan={8} className="px-3 py-8 text-center text-gray-500">
                   Geen schilderijen gevonden.
                 </td>
               </tr>
@@ -197,9 +204,72 @@ export function PaintingsList({ assignmentResult, isConfirmed, onSelectRack, onA
                       ) : (
                         <span>{p.assignedRackName}</span>
                       )
-                    ) : (
-                      <span className="text-orange-500 text-xs font-medium">Niet toegewezen</span>
-                    )}
+                    ) : (() => {
+                      const info = assignmentResult
+                        ? getPlacementFailReason(p, assignmentResult.racks)
+                        : null;
+                      const colorClass = info
+                        ? FAIL_REASON_COLORS[info.reason]
+                        : 'bg-orange-100 text-orange-700 border-orange-200';
+                      return (
+                        <div className="flex flex-col gap-1">
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-medium w-fit ${colorClass}`}>
+                            ⚠ Niet toegewezen
+                          </span>
+                          {info && (
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded border text-xs w-fit ${colorClass}`}>
+                              {info.label}
+                            </span>
+                          )}
+                          {info && (
+                            <span className="text-xs text-gray-400 max-w-xs leading-snug">
+                              {info.detail}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </td>
+                  {/* Actions column */}
+                  <td className="px-3 py-2 text-right whitespace-nowrap">
+                    <div className="flex items-center justify-end gap-1">
+                      {isUnassigned && onAssignPainting && (
+                        <button
+                          type="button"
+                          onClick={() => setAssignTarget(p)}
+                          className="text-xs text-blue-600 hover:text-blue-800 font-medium px-1.5 py-0.5 rounded hover:bg-blue-50"
+                          title="Toewijzen aan rek"
+                        >
+                          Toewijzen
+                        </button>
+                      )}
+                      {!isUnassigned && onUnassignPainting && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (confirm(`"${p.signatuur}" verwijderen van rek ${p.assignedRackName}?`))
+                              onUnassignPainting(p.id);
+                          }}
+                          className="text-xs text-orange-600 hover:text-orange-800 font-medium px-1.5 py-0.5 rounded hover:bg-orange-50"
+                          title="Verwijder van rek"
+                        >
+                          Loskoppelen
+                        </button>
+                      )}
+                      {onDeletePainting && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (confirm(`Schilderij "${p.signatuur}" definitief verwijderen?`))
+                              onDeletePainting(p.id);
+                          }}
+                          className="text-xs text-red-500 hover:text-red-700 font-medium px-1.5 py-0.5 rounded hover:bg-red-50"
+                          title="Schilderij verwijderen"
+                        >
+                          🗑️
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );
@@ -216,6 +286,17 @@ export function PaintingsList({ assignmentResult, isConfirmed, onSelectRack, onA
             setShowAdd(false);
           }}
           onCancel={() => setShowAdd(false)}
+        />
+      )}
+
+      {assignTarget && onAssignPainting && (
+        <AssignPaintingModal
+          painting={assignTarget}
+          onAssign={async (paintingId, rackName) => {
+            await onAssignPainting(paintingId, rackName);
+            setAssignTarget(null);
+          }}
+          onCancel={() => setAssignTarget(null)}
         />
       )}
     </div>

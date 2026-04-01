@@ -1,10 +1,14 @@
+import { useState } from 'react';
 import type { AssignmentResult } from '../types';
+import { getPlacementFailReason, FAIL_REASON_COLORS } from '../utils/getPlacementFailReason';
 
 interface SummaryPanelProps {
   assignmentResult: AssignmentResult | null;
 }
 
 export function SummaryPanel({ assignmentResult }: SummaryPanelProps) {
+  const [showUnassigned, setShowUnassigned] = useState(false);
+
   const totalRacks = assignmentResult?.racks.length ?? 0;
   const totalPlaced = assignmentResult
     ? assignmentResult.racks.reduce(
@@ -67,6 +71,41 @@ export function SummaryPanel({ assignmentResult }: SummaryPanelProps) {
             </span>
           </div>
         ))}
+
+        {/* Unassigned expandable block */}
+        {unassigned > 0 && (
+          <div className="border border-red-200 rounded-lg overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowUnassigned((v) => !v)}
+              className="w-full flex items-center justify-between bg-red-50 px-3 py-2 text-sm hover:bg-red-100 transition-colors"
+            >
+              <span className="flex items-center gap-2 text-red-700 font-medium">
+                ⚠️ {unassigned} niet geplaatst
+              </span>
+              <span className="text-red-400 text-xs">{showUnassigned ? '▲ verberg' : '▼ toon reden'}</span>
+            </button>
+            {showUnassigned && assignmentResult && (
+              <ul className="divide-y divide-red-100 bg-white max-h-72 overflow-y-auto">
+                {assignmentResult.unassigned.map((p) => {
+                  const info = getPlacementFailReason(p, assignmentResult.racks);
+                  const colorClass = FAIL_REASON_COLORS[info.reason];
+                  return (
+                    <li key={p.id} className="px-3 py-2 flex flex-col gap-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-semibold text-gray-800 truncate">{p.signatuur}</span>
+                        <span className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded border text-xs font-medium ${colorClass}`}>
+                          {info.label}
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-gray-500 leading-snug">{info.detail}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        )}
 
         {/* Space left block */}
         <div className="bg-gray-50 rounded-lg px-3 py-2 border border-gray-200">

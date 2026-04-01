@@ -47,6 +47,10 @@ function apiRouterPlugin() {
               modulePath = '/api/assignment.ts';
             } else if (pathname === '/api/racks' || pathname === '/api/racks/') {
               modulePath = '/api/racks.ts';
+            } else if (pathname === '/api/rack-types' || pathname === '/api/rack-types/') {
+              modulePath = '/api/rack-types.ts';
+            } else if (pathname === '/api/clear-all' || pathname === '/api/clear-all/') {
+              modulePath = '/api/clear-all.ts';
             } else if (pathname === '/api/seed' || pathname === '/api/seed/') {
               modulePath = '/api/seed.ts';
             } else if (pathname === '/api/fill-suggestions') {

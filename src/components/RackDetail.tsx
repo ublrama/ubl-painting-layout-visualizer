@@ -11,6 +11,8 @@ interface RackDetailProps {
   onBack: () => void;
   onPrev: () => void;
   onNext: () => void;
+  onUnassignPainting?: (paintingId: string) => Promise<void>;
+  onAddPaintingToRack?: () => void;
 }
 
 export function RackDetail({
@@ -21,12 +23,14 @@ export function RackDetail({
   onBack,
   onPrev,
   onNext,
+  onUnassignPainting,
+  onAddPaintingToRack,
 }: RackDetailProps) {
   const { rackType } = rack;
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Breadcrumb + print button */}
+      {/* Breadcrumb + actions */}
       <div className="flex items-center justify-between">
         <nav className="flex items-center gap-2 text-sm">
           <button onClick={onBack} className="text-blue-600 hover:underline font-medium">
@@ -35,12 +39,22 @@ export function RackDetail({
           <span className="text-gray-400">/</span>
           <span className="text-gray-900 font-medium">{rack.name}</span>
         </nav>
-        <button
-          onClick={() => window.print()}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white border-2 border-gray-300 text-sm text-gray-700 hover:text-gray-900 hover:border-blue-500 transition-colors"
-        >
-          🖨️ Afdrukken
-        </button>
+        <div className="flex items-center gap-2">
+          {onAddPaintingToRack && (
+            <button
+              onClick={onAddPaintingToRack}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
+            >
+              + Schilderij toevoegen
+            </button>
+          )}
+          <button
+            onClick={() => window.print()}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white border-2 border-gray-300 text-sm text-gray-700 hover:text-gray-900 hover:border-blue-500 transition-colors"
+          >
+            🖨️ Afdrukken
+          </button>
+        </div>
       </div>
 
       {/* Rack info */}
@@ -106,6 +120,19 @@ export function RackDetail({
                 <span className="w-2 h-2 rounded-sm flex-shrink-0" style={{ backgroundColor: color }} />
                 <span className="text-gray-700 truncate">{p.signatuur}</span>
                 <span className="text-gray-500 ml-auto flex-shrink-0">{p.width}×{p.height} cm</span>
+                {onUnassignPainting && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm(`"${p.signatuur}" verwijderen van dit rek? Het schilderij wordt niet gewist, alleen niet-toegewezen.`))
+                        onUnassignPainting(p.id);
+                    }}
+                    className="ml-2 text-red-500 hover:text-red-700 flex-shrink-0"
+                    title="Verwijder van rek"
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
             );
           })}

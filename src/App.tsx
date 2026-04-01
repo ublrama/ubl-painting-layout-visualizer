@@ -5,12 +5,14 @@ import { parseRackTypesCsv } from './utils/parseRackTypesCsv';
 import { parseRacksCsv } from './utils/parseRacksCsv';
 import { assignPaintingsToRacks } from './utils/assignPaintingsToRacks';
 import { useAssignment } from './hooks/useAssignment';
+import { useAuthFetch } from './hooks/useAuthFetch';
 import { AuthGuard } from './components/AuthGuard';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
 import { RackDetail } from './components/RackDetail';
 import { PaintingsList } from './components/PaintingsList';
+import { AddPaintingModal } from './components/AddPaintingModal';
 import { DatabasePanel } from './components/DatabasePanel';
 import { SCALE } from './constants';
 
@@ -22,6 +24,7 @@ type Tab = 'racks' | 'paintings';
 
 export default function App() {
   const [localAssignment, setLocalAssignment] = useState<AssignmentResult | null>(null);
+  const authFetch = useAuthFetch();
 
   // SWR-backed assignment (from API)
   const { assignment: apiAssignment, isLoading: apiLoading, isConfirmed, confirmAssignment, mutate } = useAssignment();
@@ -30,6 +33,7 @@ export default function App() {
   const rackTypesRef = useRef<RackType[]>([]);
 
   const [showDatabasePanel, setShowDatabasePanel] = useState(false);
+  const [showAddPaintingForRack, setShowAddPaintingForRack] = useState<string | null>(null);
 
   const [view, setView] = useState<View>({ kind: 'dashboard' });
   const [zoom, setZoom] = useState<number>(SCALE);
@@ -40,8 +44,8 @@ export default function App() {
 
   // Load demo data on mount (only if API has no data yet)
   useEffect(() => {
-    if (apiLoading) return;    // wait for API check
-    if (apiAssignment) return; // API has data — don't load CSV
+    if (apiLoading) return;
+    if (apiAssignment) return;
 
     Promise.all([
       fetch('/demo-paintings.csv').then((r) => r.text()),
@@ -53,13 +57,10 @@ export default function App() {
         const demoRackTypes = parseRackTypesCsv(rackTypesText);
         const demoRacks     = parseRacksCsv(racksText, demoRackTypes);
         rackTypesRef.current = demoRackTypes;
-
         const result = assignPaintingsToRacks(demoPaintings, demoRacks);
         setLocalAssignment(result);
       })
-      .catch(() => {
-        // Demo files not available — show empty state
-      });
+      .catch(() => {});
   }, [apiLoading, apiAssignment]);
 
   const currentRackIndex = view.kind === 'detail' ? view.rackIndex : 0;
@@ -68,7 +69,20 @@ export default function App() {
     setView({ kind: 'detail', rackIndex: index });
   }
 
+  // ── Painting handlers ────────────────────────────────────────────────────
+
   async function handleAddPainting(data: Omit<Painting, 'id' | 'manuallyPlaced'>) {
+    // Try API first
+    try {
+      const res = await authFetch('/api/paintings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (res.ok) { await mutate(); return; }
+    } catch { /* fall through to local */ }
+
+    // Local fallback
     const newPainting: Painting = { ...data, id: `manual-${Date.now()}`, manuallyPlaced: false };
     setLocalAssignment((prev) => {
       if (!prev) return prev;
@@ -81,6 +95,119 @@ export default function App() {
       return assignPaintingsToRacks(allPaintings, emptyRacks);
     });
   }
+
+  async function handleDeletePainting(paintingId: string) {
+    try {
+      const res = await authFetch(`/api/paintings/${paintingId}`, { method: 'DELETE' });
+      if (res.ok) { await mutate(); return; }
+    } catch { /* fall through */ }
+
+    setLocalAssignment((prev) => {
+      if (!prev) return prev;
+      const allPaintings: Painting[] = [
+        ...prev.racks.flatMap((r) => r.paintings),
+        ...prev.unassigned,
+      ].filter((p) => p.id !== paintingId);
+      const emptyRacks = prev.racks.map((r) => ({ ...r, paintings: [] }));
+      return assignPaintingsToRacks(allPaintings, emptyRacks);
+    });
+  }
+
+  async function handleUnassignPainting(paintingId: string) {
+    try {
+      const res = await authFetch(`/api/paintings/${paintingId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignedRackName: null }),
+      });
+      if (res.ok) { await mutate(); return; }
+    } catch { /* fall through */ }
+
+    setLocalAssignment((prev) => {
+      if (!prev) return prev;
+      const allPaintings: Painting[] = [
+        ...prev.racks.flatMap((r) => r.paintings),
+        ...prev.unassigned,
+      ];
+      const painting = allPaintings.find((p) => p.id === paintingId);
+      if (painting) painting.assignedRackName = null;
+      const emptyRacks = prev.racks.map((r) => ({ ...r, paintings: [] }));
+      return assignPaintingsToRacks(allPaintings, emptyRacks);
+    });
+  }
+
+  async function handleAssignPainting(paintingId: string, rackName: string) {
+    try {
+      const res = await authFetch(`/api/paintings/${paintingId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignedRackName: rackName }),
+      });
+      if (res.ok) { await mutate(); return; }
+    } catch { /* fall through */ }
+
+    setLocalAssignment((prev) => {
+      if (!prev) return prev;
+      const allPaintings: Painting[] = [
+        ...prev.racks.flatMap((r) => r.paintings),
+        ...prev.unassigned,
+      ];
+      const painting = allPaintings.find((p) => p.id === paintingId);
+      if (painting) painting.assignedRackName = rackName;
+      const emptyRacks = prev.racks.map((r) => ({ ...r, paintings: [] }));
+      return assignPaintingsToRacks(allPaintings, emptyRacks);
+    });
+  }
+
+  // ── Rack handlers ────────────────────────────────────────────────────────
+
+  async function handleAddRack(name: string, rackTypeId: number) {
+    try {
+      const res = await authFetch('/api/racks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, rackTypeId }),
+      });
+      if (res.ok) { await mutate(); return; }
+      // API responded with an error — surface it, don't fall through to local
+      const data = await res.json();
+      throw new Error(data.error ?? 'Fout bij toevoegen rek');
+    } catch (e) {
+      // Only fall through to local on network errors (TypeError from fetch)
+      if (e instanceof TypeError) {
+        const rt = rackTypesRef.current.find((t) => t.id === rackTypeId);
+        if (!rt) throw new Error('Rektype niet gevonden');
+        setLocalAssignment((prev) => {
+          if (!prev) return prev;
+          const newRack = { name, rackType: rt, paintings: [] as any[] };
+          return { ...prev, racks: [...prev.racks, newRack] };
+        });
+        return;
+      }
+      throw e; // re-throw API errors so the modal can display them
+    }
+  }
+
+  async function handleDeleteRack(rackName: string) {
+    try {
+      const res = await authFetch(`/api/racks?name=${encodeURIComponent(rackName)}`, { method: 'DELETE' });
+      if (res.ok) { await mutate(); return; }
+    } catch { /* fall through */ }
+
+    setLocalAssignment((prev) => {
+      if (!prev) return prev;
+      const rack = prev.racks.find((r) => r.name === rackName);
+      const displaced = rack ? [...rack.paintings] : [];
+      const remaining = prev.racks.filter((r) => r.name !== rackName);
+      return {
+        ...prev,
+        racks: remaining,
+        unassigned: [...prev.unassigned, ...displaced],
+      };
+    });
+  }
+
+  // ── Confirm ──────────────────────────────────────────────────────────────
 
   async function handleConfirm() {
     await confirmAssignment();
@@ -148,12 +275,17 @@ export default function App() {
                 setActiveTab('racks');
                 goToRack(index);
               }}
+              onUnassignPainting={handleUnassignPainting}
+              onAssignPainting={handleAssignPainting}
+              onDeletePainting={handleDeletePainting}
             />
           ) : view.kind === 'dashboard' ? (
             <Dashboard
               assignmentResult={assignmentResult}
               onSelectRack={goToRack}
               onSwitchToPaintings={handleSwitchToPaintingsTab}
+              onAddRack={handleAddRack}
+              onDeleteRack={handleDeleteRack}
             />
           ) : (
             assignmentResult && assignmentResult.racks.length > 0 && (
@@ -170,15 +302,32 @@ export default function App() {
                     Math.min(assignmentResult.racks.length - 1, currentRackIndex + 1),
                   )
                 }
+                onUnassignPainting={handleUnassignPainting}
+                onAddPaintingToRack={() =>
+                  setShowAddPaintingForRack(assignmentResult.racks[currentRackIndex].name)
+                }
               />
             )
           )}
         </main>
       </div>
+
       {showDatabasePanel && (
         <DatabasePanel
           onClose={() => setShowDatabasePanel(false)}
-          onSeedComplete={() => { void mutate(); }}
+          onSeedComplete={() => { setLocalAssignment(null); void mutate(); }}
+        />
+      )}
+
+      {showAddPaintingForRack && (
+        <AddPaintingModal
+          initialRackName={showAddPaintingForRack}
+          isConfirmed={isConfirmed}
+          onSave={async (data) => {
+            await handleAddPainting(data);
+            setShowAddPaintingForRack(null);
+          }}
+          onCancel={() => setShowAddPaintingForRack(null)}
         />
       )}
     </div>

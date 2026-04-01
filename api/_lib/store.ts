@@ -208,6 +208,73 @@ export async function setAssignment(assignment: AssignmentResult): Promise<void>
   if (stateError) throw stateError;
 }
 
+// ── Clear all data ───────────────────────────────────────────────────────────
+
+export async function clearAll(): Promise<void> {
+  const supabase = getSupabase();
+  await supabase.from('placed_paintings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  await supabase.from('paintings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  await supabase.from('racks').delete().neq('name', '');
+  await supabase.from('rack_types').delete().neq('id', 0);
+  await supabase.from('assignment_state').upsert({ id: 1, confirmed_at: null }, { onConflict: 'id' });
+}
+
+// ── Rack Types CRUD ──────────────────────────────────────────────────────────
+
+export async function getRackTypes(): Promise<RackType[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('rack_types')
+    .select('*')
+    .order('id', { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((row: any) => ({
+    id: row.id,
+    height: row.height,
+    width: row.width,
+    maxDepth: row.max_depth,
+  }));
+}
+
+export async function upsertRackType(rt: RackType): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from('rack_types')
+    .upsert({ id: rt.id, height: rt.height, width: rt.width, max_depth: rt.maxDepth }, { onConflict: 'id' });
+  if (error) throw error;
+}
+
+export async function deleteRackType(id: number): Promise<void> {
+  const supabase = getSupabase();
+  // Check if any racks reference this type
+  const { data: refs } = await supabase.from('racks').select('name').eq('rack_type_id', id).limit(1);
+  if (refs && refs.length > 0) {
+    throw new Error(`Cannot delete rack type ${id}: still referenced by rack "${refs[0].name}"`);
+  }
+  const { error } = await supabase.from('rack_types').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ── Single Rack CRUD ─────────────────────────────────────────────────────────
+
+export async function upsertSingleRack(name: string, rackTypeId: number): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from('racks')
+    .upsert({ name, rack_type_id: rackTypeId }, { onConflict: 'name' });
+  if (error) throw error;
+}
+
+export async function deleteRack(name: string): Promise<void> {
+  const supabase = getSupabase();
+  // Remove placed paintings on this rack first
+  await supabase.from('placed_paintings').delete().eq('rack_name', name);
+  // Unassign paintings that were on this rack
+  await supabase.from('paintings').update({ assigned_rack_name: null }).eq('assigned_rack_name', name);
+  const { error } = await supabase.from('racks').delete().eq('name', name);
+  if (error) throw error;
+}
+
 // ── Row mappers ──────────────────────────────────────────────────────────────
 
 function rowToPainting(row: any): Painting {
