@@ -1,1 +1,1 @@
-export const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string;
+// This file has been replaced by src/lib/supabase.ts as part of the Clerk → Supabase Auth migration.

@@ -1,9 +1,11 @@
 /**
- * Verifies a Clerk JWT token from the Authorization header.
+ * Verifies a Supabase JWT token from the Authorization header.
  * Returns the userId if valid, or null if missing/invalid.
  *
- * Uses Clerk's public JWKS endpoint to verify the token.
- * No secret key needed — only the publishable key's JWKS URL.
+ * Uses the Supabase service key to call supabase.auth.getUser(token).
+ * Configure via:
+ *   SUPABASE_URL=https://xxxx.supabase.co        (already present)
+ *   SUPABASE_SERVICE_KEY=eyJ...                   (already present)
  */
 
 export interface AuthResult {
@@ -11,9 +13,11 @@ export interface AuthResult {
   sessionId: string;
 }
 
-export async function verifyClerkToken(req: Request): Promise<AuthResult | null> {
-  const clerkSecretKey = process.env.CLERK_SECRET_KEY;
-  if (!clerkSecretKey) {
+export async function verifyToken(req: Request): Promise<AuthResult | null> {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
+
+  if (!supabaseUrl || !supabaseKey) {
     // Auth not configured — allow all requests (dev mode)
     return { userId: 'dev-user', sessionId: 'dev-session' };
   }
@@ -24,15 +28,18 @@ export async function verifyClerkToken(req: Request): Promise<AuthResult | null>
   const token = authHeader.slice(7);
 
   try {
-    // Use Clerk's backend SDK to verify the token
-    const { createClerkClient } = await import('@clerk/backend');
-    const clerkClient = createClerkClient({ secretKey: clerkSecretKey });
-    const payload = await clerkClient.verifyToken(token);
-    return { userId: payload.sub, sessionId: payload.sid ?? '' };
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    if (error || !user) return null;
+    return { userId: user.id, sessionId: user.id };
   } catch {
     return null;
   }
 }
+
+// Alias so existing callers in assignment.ts, paintings.ts, seed.ts, racks.ts don't break.
+export const verifyClerkToken = verifyToken;
 
 /**
  * Returns a 401 Response for unauthorized requests.
