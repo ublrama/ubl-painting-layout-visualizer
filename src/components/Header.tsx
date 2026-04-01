@@ -10,7 +10,7 @@ interface HeaderProps {
   onPaintingsChange: (e: ChangeEvent<HTMLInputElement>) => void;
   onRackTypesChange: (e: ChangeEvent<HTMLInputElement>) => void;
   onRacksChange: (e: ChangeEvent<HTMLInputElement>) => void;
-  onConfirm?: () => Promise<unknown>;
+  onConfirm?: () => Promise<void>;
 }
 
 export function Header({

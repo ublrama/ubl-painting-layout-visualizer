@@ -139,6 +139,12 @@ export default function App() {
     setView({ kind: 'detail', rackIndex: index });
   }
 
+  async function handleConfirm() {
+    await confirmAssignment();
+    const now = new Date().toISOString();
+    setLocalAssignment((prev) => prev ? { ...prev, confirmedAt: now } : prev);
+  }
+
   function handleSwitchToPaintingsTab() {
     setActiveTab('paintings');
     setView({ kind: 'dashboard' });
@@ -155,7 +161,7 @@ export default function App() {
         onPaintingsChange={handlePaintingsChange}
         onRackTypesChange={handleRackTypesChange}
         onRacksChange={handleRacksChange}
-        onConfirm={confirmAssignment}
+        onConfirm={handleConfirm}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -195,7 +201,14 @@ export default function App() {
           </div>
 
           {activeTab === 'paintings' ? (
-            <PaintingsList assignmentResult={assignmentResult} isConfirmed={isConfirmed} />
+            <PaintingsList
+              assignmentResult={assignmentResult}
+              isConfirmed={isConfirmed}
+              onSelectRack={(index) => {
+                setActiveTab('racks');
+                goToRack(index);
+              }}
+            />
           ) : view.kind === 'dashboard' ? (
             <Dashboard
               assignmentResult={assignmentResult}

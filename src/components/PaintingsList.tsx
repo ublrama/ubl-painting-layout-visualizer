@@ -9,9 +9,10 @@ type SortField = 'signatuur' | 'width' | 'height' | 'depth' | 'collection';
 interface PaintingsListProps {
   assignmentResult: AssignmentResult | null;
   isConfirmed?: boolean;
+  onSelectRack?: (rackIndex: number) => void;
 }
 
-export function PaintingsList({ assignmentResult }: PaintingsListProps) {
+export function PaintingsList({ assignmentResult, onSelectRack }: PaintingsListProps) {
   const [search,           setSearch]       = useState('');
   const [assignedFilter,   setAssignedFilter] = useState<AssignedFilter>('all');
   const [collectionFilter, setCollFilter]   = useState('');
@@ -167,7 +168,24 @@ export function PaintingsList({ assignmentResult }: PaintingsListProps) {
                   <td className="px-3 py-2 text-gray-600">{p.height}</td>
                   <td className="px-3 py-2 text-gray-600">{p.depth}</td>
                   <td className="px-3 py-2 text-gray-600">
-                    {p.assignedRackName ?? (
+                    {p.assignedRackName ? (
+                      onSelectRack ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const idx = assignmentResult?.racks.findIndex(
+                              (r) => r.name === p.assignedRackName,
+                            ) ?? -1;
+                            if (idx >= 0) onSelectRack(idx);
+                          }}
+                          className="text-blue-600 hover:underline font-medium text-xs"
+                        >
+                          {p.assignedRackName} →
+                        </button>
+                      ) : (
+                        <span>{p.assignedRackName}</span>
+                      )
+                    ) : (
                       <span className="text-orange-500 text-xs font-medium">Niet toegewezen</span>
                     )}
                   </td>

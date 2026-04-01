@@ -7,6 +7,7 @@ interface CsvRow {
   'Hoogte (cm)': string;
   'Breedte (cm)': string;
   'Diepte (cm)': string;
+  Rek: string;
   [key: string]: string;
 }
 
@@ -62,6 +63,7 @@ export function parsePaintingsCsv(csvText: string): Painting[] {
 
     const depth = depthStr ? parseDutchFloat(depthStr) : 0;
     const collection = getCollection((row.Collectie ?? '').trim());
+    const predefinedRack = (row.Rek ?? '').trim() || null;
 
     paintings.push({
       id: signatuur,
@@ -72,6 +74,7 @@ export function parsePaintingsCsv(csvText: string): Painting[] {
       depth: isNaN(depth) ? 0 : depth,
       assignedRackName: null,
       manuallyPlaced: false,
+      predefinedRack,
     });
   }
   return paintings;

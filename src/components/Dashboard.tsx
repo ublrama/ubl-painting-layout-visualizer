@@ -31,9 +31,10 @@ interface DashboardProps {
 
 export function Dashboard({ assignmentResult, onSelectRack, onSwitchToPaintings }: DashboardProps) {
   // ── All hooks must be called unconditionally before any early return ──
-  const [usageFilter, setUsageFilter] = useState<UsageFilter>('used');
-  const [sortDir,     setSortDir]     = useState<SortDir>('asc');
-  const [typeFilter,  setTypeFilter]  = useState<number | null>(null);
+  const [usageFilter,    setUsageFilter]    = useState<UsageFilter>('used');
+  const [sortDir,        setSortDir]        = useState<SortDir>('asc');
+  const [typeFilter,     setTypeFilter]     = useState<number | null>(null);
+  const [paintingSearch, setPaintingSearch] = useState('');
 
   const racks      = assignmentResult?.racks     ?? [];
   const unassigned = assignmentResult?.unassigned ?? [];
@@ -87,8 +88,20 @@ export function Dashboard({ assignmentResult, onSelectRack, onSwitchToPaintings 
       ? usageFiltered
       : usageFiltered.filter((r) => r.rackType.id === typeFilter);
 
-  // 3. Sort
-  const displayRacks = [...typeFiltered].sort((a, b) => compareRacks(a, b, sortDir));
+  // 3. Painting search — keep only racks that contain a matching painting
+  const searchQuery = paintingSearch.trim().toLowerCase();
+  const searchFiltered = searchQuery
+    ? typeFiltered.filter((r) =>
+        r.paintings.some(
+          (p) =>
+            p.signatuur.toLowerCase().includes(searchQuery) ||
+            p.collection.toLowerCase().includes(searchQuery),
+        ),
+      )
+    : typeFiltered;
+
+  // 4. Sort
+  const displayRacks = [...searchFiltered].sort((a, b) => compareRacks(a, b, sortDir));
 
   const usageOptions: { key: UsageFilter; label: string; count: number }[] = [
     { key: 'all',    label: 'Alle rekken',      count: racks.length },
@@ -152,7 +165,7 @@ export function Dashboard({ assignmentResult, onSelectRack, onSwitchToPaintings 
         </div>
       </div>
 
-      {/* ── Row 2: sort toggle + type filter ── */}
+      {/* ── Row 2: sort toggle + type filter + painting search ── */}
       <div className="flex flex-wrap items-center gap-2 mb-5 pb-4 border-b border-gray-100">
         {/* Sort direction toggle */}
         <button
@@ -187,6 +200,30 @@ export function Dashboard({ assignmentResult, onSelectRack, onSwitchToPaintings 
             ))}
           </select>
         </div>
+
+        {/* Divider */}
+        <div className="h-5 w-px bg-gray-200" />
+
+        {/* Painting search */}
+        <div className="flex items-center gap-2 flex-1 min-w-48">
+          <input
+            type="search"
+            value={paintingSearch}
+            onChange={(e) => setPaintingSearch(e.target.value)}
+            placeholder="Zoek op schilderij (signatuur of collectie)…"
+            className="w-full text-xs border-2 border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 hover:border-blue-400 focus:border-blue-500 focus:outline-none transition-colors"
+          />
+          {paintingSearch && (
+            <button
+              type="button"
+              onClick={() => setPaintingSearch('')}
+              className="text-xs text-gray-400 hover:text-gray-700 flex-shrink-0"
+              title="Wis zoekopdracht"
+            >
+              ✕
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── Grid ── */}
@@ -198,12 +235,25 @@ export function Dashboard({ assignmentResult, onSelectRack, onSwitchToPaintings 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {displayRacks.map((rack) => {
             const originalIndex = racks.indexOf(rack);
+            const matchedPaintings = searchQuery
+              ? rack.paintings.filter(
+                  (p) =>
+                    p.signatuur.toLowerCase().includes(searchQuery) ||
+                    p.collection.toLowerCase().includes(searchQuery),
+                )
+              : [];
             return (
-              <RackCard
-                key={rack.name}
-                rack={rack}
-                onSelect={() => onSelectRack(originalIndex)}
-              />
+              <div key={rack.name} className="relative">
+                {searchQuery && matchedPaintings.length > 0 && (
+                  <div className="absolute -top-2 -right-2 z-10 bg-yellow-400 text-yellow-900 text-[10px] font-bold px-2 py-0.5 rounded-full shadow">
+                    {matchedPaintings.length} match{matchedPaintings.length > 1 ? 'es' : ''}
+                  </div>
+                )}
+                <RackCard
+                  rack={rack}
+                  onSelect={() => onSelectRack(originalIndex)}
+                />
+              </div>
             );
           })}
         </div>

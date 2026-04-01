@@ -7,6 +7,7 @@ export interface Painting {
   depth: number;                    // cm (diepte), 0 if missing
   assignedRackName: string | null;  // null = unassigned
   manuallyPlaced: boolean;          // true once physically confirmed
+  predefinedRack: string | null;    // rack name forced by the CSV "Rek" column
 }
 
 export interface RackType {
