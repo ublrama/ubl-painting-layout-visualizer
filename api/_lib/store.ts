@@ -183,25 +183,42 @@ export async function setAssignment(assignment: AssignmentResult): Promise<void>
     await supabase.from('paintings').update({ assigned_rack_name: null }).in('id', unassignedIds);
   }
 
-  // 3. Insert placed_paintings and update paintings.assigned_rack_name
+  // 3. Bulk insert placed_paintings in one call
+  const allPlacedRows: { id: string; rack_name: string; x: number; y: number }[] = [];
   for (const rack of assignment.racks) {
-    if (rack.paintings.length === 0) continue;
-    const placedRows = rack.paintings.map((p) => ({
-      id: p.id,
-      rack_name: rack.name,
-      x: p.x,
-      y: p.y,
-    }));
+    for (const p of rack.paintings) {
+      allPlacedRows.push({ id: p.id, rack_name: rack.name, x: p.x, y: p.y });
+    }
+  }
+  if (allPlacedRows.length > 0) {
     const { error: insertError } = await supabase
       .from('placed_paintings')
-      .upsert(placedRows, { onConflict: 'id' });
+      .upsert(allPlacedRows, { onConflict: 'id' });
     if (insertError) throw insertError;
-
-    const ids = rack.paintings.map((p) => p.id);
-    await supabase.from('paintings').update({ assigned_rack_name: rack.name }).in('id', ids);
   }
 
-  // 4. Update confirmedAt
+  // 4. Bulk update paintings.assigned_rack_name in one call
+  const placedPaintingUpdates = assignment.racks.flatMap((rack) =>
+    rack.paintings.map((p) => ({
+      id: p.id,
+      signatuur: p.signatuur,
+      collection: p.collection,
+      width: p.width,
+      height: p.height,
+      depth: p.depth,
+      assigned_rack_name: rack.name,
+      manually_placed: p.manuallyPlaced,
+      predefined_rack: p.predefinedRack ?? null,
+    }))
+  );
+  if (placedPaintingUpdates.length > 0) {
+    const { error: updateError } = await supabase
+      .from('paintings')
+      .upsert(placedPaintingUpdates, { onConflict: 'id' });
+    if (updateError) throw updateError;
+  }
+
+  // 5. Update confirmedAt
   const { error: stateError } = await supabase
     .from('assignment_state')
     .upsert({ id: 1, confirmed_at: assignment.confirmedAt }, { onConflict: 'id' });

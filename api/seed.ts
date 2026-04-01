@@ -110,11 +110,20 @@ export default async function handler(req: Request): Promise<Response> {
   const auth = await verifyClerkToken(req);
   if (!auth) return unauthorized();
 
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
+  if (!supabaseUrl || !supabaseKey) {
+    return Response.json(
+      { error: 'Missing SUPABASE_URL or SUPABASE_SERVICE_KEY environment variables' },
+      { status: 500, headers: CORS_HEADERS },
+    );
+  }
+
   try {
     // Clear existing data to allow re-seeding.
     // Supabase requires a WHERE clause for DELETE; .neq() with a value that no
     // real row can have effectively means "delete all rows".
-    const supabaseClient = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
+    const supabaseClient = createClient(supabaseUrl, supabaseKey);
     await supabaseClient.from('placed_paintings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
     await supabaseClient.from('paintings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
     await supabaseClient.from('racks').delete().neq('name', '');        // delete all rows (name is never empty)
