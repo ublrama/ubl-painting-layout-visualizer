@@ -5,13 +5,14 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import type { Painting, PlacedPainting } from '../src/types';
-import { getPaintings, setPaintings, getAssignment, setAssignment } from './_lib/store';
+import { getPaintings, upsertPainting, getAssignment, setAssignment } from './_lib/store';
 import { buildShelfState, tryPlace } from './_lib/placement';
+import { verifyClerkToken, unauthorized } from './_lib/auth';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
 export default async function handler(req: Request): Promise<Response> {
@@ -63,6 +64,9 @@ export default async function handler(req: Request): Promise<Response> {
 
   // ── POST ─────────────────────────────────────────────────────────────────
   if (req.method === 'POST') {
+    const auth = await verifyClerkToken(req);
+    if (!auth) return unauthorized();
+
     let body: Partial<Painting>;
     try {
       body = await req.json();
@@ -84,11 +88,10 @@ export default async function handler(req: Request): Promise<Response> {
       depth: Number(depth),
       assignedRackName: assignedRackName ?? null,
       manuallyPlaced: false,
+      predefinedRack: null,
     };
 
-    const paintings = await getPaintings();
-    paintings.push(newPainting);
-    await setPaintings(paintings);
+    await upsertPainting(newPainting);
 
     // If assignedRackName provided, add to assignment
     if (newPainting.assignedRackName) {

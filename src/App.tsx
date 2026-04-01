@@ -6,6 +6,7 @@ import { parseRackTypesCsv } from './utils/parseRackTypesCsv';
 import { parseRacksCsv } from './utils/parseRacksCsv';
 import { assignPaintingsToRacks } from './utils/assignPaintingsToRacks';
 import { useAssignment } from './hooks/useAssignment';
+import { AuthGuard } from './components/AuthGuard';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { Dashboard } from './components/Dashboard';
@@ -165,7 +166,8 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-white font-sans flex flex-col">
+    <AuthGuard>
+      <div className="min-h-screen bg-white font-sans flex flex-col">
       <Header
         assignmentResult={assignmentResult}
         paintingsFileName={paintingsFileName}
@@ -251,5 +253,6 @@ export default function App() {
         </main>
       </div>
     </div>
+    </AuthGuard>
   );
 }
