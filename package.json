@@ -6,11 +6,15 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:server": "tsc --noCheck -p server/tsconfig.json",
+    "build:all": "npm run build && npm run build:server",
     "preview": "vite preview",
     "lint": "eslint ."
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.101.1",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.3.2",
     "papaparse": "^5.4.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -19,6 +23,7 @@
     "vercel": "^50.38.2"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "@types/papaparse": "^5.3.14",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",

@@ -26,14 +26,24 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install
 COPY . .
-RUN npm run build
+RUN npm run build:all
 
 
-# ---- Production Stage (serve built app with nginx) ----
-FROM nginx:alpine AS production
+# ---- Production Stage ----
+# Note: nginx.conf is no longer used in production; it can be used as reference for local/dev setups.
+FROM node:20-alpine AS production
 
-COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+WORKDIR /app
 
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+# Copy built Express server
+COPY --from=builder /app/dist-server ./dist-server
+# Copy static frontend bundle
+COPY --from=builder /app/dist ./dist
+# Copy public folder (needed by the seed endpoint for CSV files)
+COPY --from=builder /app/public ./public
+# Install only production dependencies
+COPY package.json package-lock.json* ./
+RUN npm install --omit=dev
+
+EXPOSE 3000
+CMD ["node", "dist-server/server/index.js"]
