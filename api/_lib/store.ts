@@ -18,10 +18,11 @@ import type { Painting, Rack, RackType, PlacedPainting, AssignmentResult } from 
 // Node.js 18+ fetch (via undici) ignores the keepalive: false option and pools
 // connections with 5-second keepalive timers. Those timers block the event loop
 // from becoming empty, so Vercel waits the full 30s timeout before killing the
-// function. Setting keepAliveTimeout: 0 forces connections to close immediately.
+// function. Setting keepAliveTimeout: 1 (minimum allowed) forces connections to
+// close almost immediately (1ms is effectively disabled).
 const httpAgent = new Agent({
-  keepAliveTimeout: 0,          // close idle connections immediately
-  keepAliveMaxTimeout: 0,       // no keepalive at all
+  keepAliveTimeout: 1,          // minimum allowed (1ms = effectively disabled)
+  keepAliveMaxTimeout: 1,       // minimum allowed
   pipelining: 0,                // disable HTTP pipelining (not needed for our use case)
 });
 
