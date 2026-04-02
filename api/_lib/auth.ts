@@ -1,7 +1,11 @@
 /**
  * Verifies a Supabase JWT token from the Authorization header.
- * Compatible with both Web API Request objects (headers.get) and
- * Node.js IncomingMessage objects (headers as a plain object).
+ * Returns the userId if valid, or null if missing/invalid.
+ *
+ * Uses the Supabase service key to call supabase.auth.getUser(token).
+ * Configure via:
+ *   SUPABASE_URL=https://xxxx.supabase.co        (already present)
+ *   SUPABASE_SERVICE_KEY=eyJ...                   (already present)
  */
 
 export interface AuthResult {
@@ -9,17 +13,20 @@ export interface AuthResult {
   sessionId: string;
 }
 
-/** Extract the Authorization header value regardless of request style. */
-function getAuthorizationHeader(req: Request | { headers: Record<string, string | string[] | undefined> }): string | null {
-  // Web API Request — has Headers.get()
-  if (typeof (req.headers as { get?: unknown }).get === 'function') {
-    return (req as Request).headers.get('Authorization');
+/**
+ * Reads a header value from either a Fetch API Request (headers.get) or a
+ * Node.js IncomingMessage-style plain object.  Returns null when absent.
+ */
+export function getHeader(req: Request, name: string): string | null {
+  type MaybeHeaders = { get?: (n: string) => string | null } & Record<string, string | string[] | undefined>;
+  const h = req.headers as unknown as MaybeHeaders;
+  if (typeof h.get === 'function') {
+    return h.get(name);
   }
-  // Node.js IncomingMessage — plain object, lowercase keys
-  const h = (req.headers as Record<string, string | string[] | undefined>)['authorization']
-         ?? (req.headers as Record<string, string | string[] | undefined>)['Authorization'];
-  if (Array.isArray(h)) return h[0] ?? null;
-  return h ?? null;
+  // Node.js IncomingMessage: headers are stored lower-cased
+  const val = h[name.toLowerCase()];
+  if (Array.isArray(val)) return val.length > 0 ? val[0] : null;
+  return val ?? null;
 }
 
 export async function verifyToken(req: Request): Promise<AuthResult | null> {
@@ -31,7 +38,7 @@ export async function verifyToken(req: Request): Promise<AuthResult | null> {
     return { userId: 'dev-user', sessionId: 'dev-session' };
   }
 
-  const authHeader = getAuthorizationHeader(req);
+  const authHeader = getHeader(req, 'Authorization');
   if (!authHeader?.startsWith('Bearer ')) return null;
 
   const token = authHeader.slice(7);
@@ -47,7 +54,7 @@ export async function verifyToken(req: Request): Promise<AuthResult | null> {
   }
 }
 
-// Alias so existing callers don't break.
+// Alias so existing callers in assignment.ts, paintings.ts, seed.ts, racks.ts don't break.
 export const verifyClerkToken = verifyToken;
 
 /**

@@ -15,7 +15,7 @@ import { join } from 'path';
 import type { Painting, RackType, Rack } from '../src/types';
 import { assignPaintingsToRacks } from './_lib/placement.js';
 import { setRacks, setAssignment } from './_lib/store.js';
-import { verifyClerkToken } from './_lib/auth.js';
+import { verifyClerkToken, getHeader } from './_lib/auth.js';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -94,17 +94,7 @@ function parseRacks(csvText: string, rackTypes: RackType[]): Rack[] {
   return racks;
 }
 
-/** Extract a header value from either Web API Request or Node.js IncomingMessage. */
-function getHeader(req: Request, name: string): string {
-  if (typeof (req.headers as { get?: unknown }).get === 'function') {
-    return (req as Request).headers.get(name) ?? '';
-  }
-  const h = (req.headers as Record<string, string | string[] | undefined>)[name.toLowerCase()];
-  if (Array.isArray(h)) return h[0] ?? '';
-  return h ?? '';
-}
-
-// ── File helper ───────────────────────────────────────────────────────────────
+// ── File helper ──────────────────────────────────────────────────────────────
 
 function safeReadFile(filePath: string): string {
   try {
@@ -135,22 +125,20 @@ export default async function handler(req: Request): Promise<Response> {
       return Response.json({ error: 'Unauthorized' }, { status: 401, headers: CORS_HEADERS });
     }
 
-    // Clear existing data — run deletes in parallel to save time
+    // Clear existing data
     const supabaseClient = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
-    await Promise.all([
-      supabaseClient.from('placed_paintings').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
-      supabaseClient.from('paintings').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
-      supabaseClient.from('racks').delete().neq('name', ''),
-      supabaseClient.from('rack_types').delete().neq('id', 0),
-      supabaseClient.from('assignment_state').upsert({ id: 1, confirmed_at: null }, { onConflict: 'id' }),
-    ]);
+    await supabaseClient.from('placed_paintings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabaseClient.from('paintings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabaseClient.from('racks').delete().neq('name', '');
+    await supabaseClient.from('rack_types').delete().neq('id', 0);
+    await supabaseClient.from('assignment_state').upsert({ id: 1, confirmed_at: null }, { onConflict: 'id' });
 
     const publicDir = join(process.cwd(), 'public');
     let paintingsCsv: string;
     let rackTypesCsv: string;
     let racksCsv: string;
 
-    const contentType = getHeader(req, 'content-type');
+    const contentType = getHeader(req, 'content-type') ?? '';
     if (contentType.includes('multipart/form-data')) {
       const formData = await req.formData();
       const paintingsBlob = formData.get('paintings') as File | null;
