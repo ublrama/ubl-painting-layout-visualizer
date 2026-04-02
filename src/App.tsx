@@ -27,7 +27,7 @@ export default function App() {
   const authFetch = useAuthFetch();
 
   // SWR-backed assignment (from API)
-  const { assignment: apiAssignment, isLoading: apiLoading, isConfirmed, confirmAssignment, mutate } = useAssignment();
+  const { assignment: apiAssignment, isLoading: apiLoading, mutate } = useAssignment();
 
   // Keep a ref to the latest rack types so handlers can access without stale closures
   const rackTypesRef = useRef<RackType[]>([]);
@@ -207,13 +207,7 @@ export default function App() {
     });
   }
 
-  // ── Confirm ──────────────────────────────────────────────────────────────
-
-  async function handleConfirm() {
-    await confirmAssignment();
-    const now = new Date().toISOString();
-    setLocalAssignment((prev) => prev ? { ...prev, confirmedAt: now } : prev);
-  }
+  // ── Switch tabs ──────────────────────────────────────────────────────────
 
   function handleSwitchToPaintingsTab() {
     setActiveTab('paintings');
@@ -225,8 +219,6 @@ export default function App() {
       <div className="min-h-screen bg-white font-sans flex flex-col">
       <Header
         assignmentResult={assignmentResult}
-        isConfirmed={isConfirmed}
-        onConfirm={handleConfirm}
         onDatabaseManage={() => setShowDatabasePanel(true)}
       />
 
