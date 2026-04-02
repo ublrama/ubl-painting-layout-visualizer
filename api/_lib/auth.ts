@@ -13,6 +13,22 @@ export interface AuthResult {
   sessionId: string;
 }
 
+/**
+ * Reads a header value from either a Fetch API Request (headers.get) or a
+ * Node.js IncomingMessage-style plain object.  Returns null when absent.
+ */
+export function getHeader(req: Request, name: string): string | null {
+  type MaybeHeaders = { get?: (n: string) => string | null } & Record<string, string | string[] | undefined>;
+  const h = req.headers as unknown as MaybeHeaders;
+  if (typeof h.get === 'function') {
+    return h.get(name);
+  }
+  // Node.js IncomingMessage: headers are stored lower-cased
+  const val = h[name.toLowerCase()];
+  if (Array.isArray(val)) return val.length > 0 ? val[0] : null;
+  return val ?? null;
+}
+
 export async function verifyToken(req: Request): Promise<AuthResult | null> {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
@@ -22,7 +38,7 @@ export async function verifyToken(req: Request): Promise<AuthResult | null> {
     return { userId: 'dev-user', sessionId: 'dev-session' };
   }
 
-  const authHeader = req.headers.get('Authorization');
+  const authHeader = getHeader(req, 'Authorization');
   if (!authHeader?.startsWith('Bearer ')) return null;
 
   const token = authHeader.slice(7);

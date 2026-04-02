@@ -15,7 +15,7 @@ import { join } from 'path';
 import type { Painting, RackType, Rack } from '../src/types';
 import { assignPaintingsToRacks } from './_lib/placement.js';
 import { setRacks, setAssignment } from './_lib/store.js';
-import { verifyClerkToken } from './_lib/auth.js';
+import { verifyClerkToken, getHeader } from './_lib/auth.js';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -138,7 +138,7 @@ export default async function handler(req: Request): Promise<Response> {
     let rackTypesCsv: string;
     let racksCsv: string;
 
-    const contentType = req.headers.get('content-type') ?? '';
+    const contentType = getHeader(req, 'content-type') ?? '';
     if (contentType.includes('multipart/form-data')) {
       const formData = await req.formData();
       const paintingsBlob = formData.get('paintings') as File | null;
