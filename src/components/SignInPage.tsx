@@ -46,9 +46,9 @@ export function SignInPage() {
       <div className="w-full max-w-sm">
         {/* Brand header */}
         <div className="text-center mb-8">
-          <div className="text-5xl mb-3">🏛️</div>
-          <h1 className="text-2xl font-bold text-white">Schilderijen Planner</h1>
-          <p className="text-[#8b9db8] text-sm mt-1">Universiteit Leiden — Museum Layout Visualizer</p>
+          <img src="/logo2.png" alt="Logo" className="h-48 w-auto mx-auto mb-3" />
+          <h4 className="text-2xl font-bold text-[#8b9db8]">Schilderijen plaatsing magazijn</h4>
+          {/*<p className="text-[#8b9db8] text-sm mt-1">Schilderijen plaatsing magazijn</p>*/}
         </div>
 
         {/* Card */}

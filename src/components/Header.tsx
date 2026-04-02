@@ -3,15 +3,11 @@ import { useAuthContext } from '../contexts/AuthContext';
 
 interface HeaderProps {
   assignmentResult: AssignmentResult | null;
-  isConfirmed?: boolean;
-  onConfirm?: () => Promise<void>;
   onDatabaseManage: () => void;
 }
 
 export function Header({
   assignmentResult,
-  isConfirmed,
-  onConfirm,
   onDatabaseManage,
 }: HeaderProps) {
   const { user, signOut } = useAuthContext();
@@ -28,10 +24,10 @@ export function Header({
     <header className="flex items-center justify-between px-6 py-4 bg-[#0a2060]/90 backdrop-blur border-b border-[#002580] sticky top-0 z-30 flex-wrap gap-3">
       {/* Left: Title + stats */}
       <div className="flex items-center gap-3">
-        <span className="text-2xl">🏛️</span>
+          <img src="/logo2.png" alt="Logo" className="h-10 w-auto self-center" />
         <div>
-          <h1 className="text-lg font-bold text-white leading-tight">Schilderijen Planner</h1>
-          <p className="text-xs text-[#8b9db8] leading-none">Universiteit Leiden — Museum Layout Visualizer</p>
+          <h1 className="text-lg font-bold text-white leading-tight">UBL Schilderijen plaatsing</h1>
+          {/*<p className="text-xs text-[#8b9db8] leading-none">Universiteit Leiden — Museum Layout Visualizer</p>*/}
         </div>
         {assignmentResult && (
           <div className="hidden sm:flex items-center gap-2 ml-4">
@@ -50,31 +46,9 @@ export function Header({
         )}
       </div>
 
-      {/* Right: Confirmation + Database button */}
+      {/* Right: Database button */}
       <div className="flex items-center gap-2 flex-wrap">
-        {/* Confirmation status */}
-        {assignmentResult && (
-          isConfirmed ? (
-            <span className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-green-600 text-white font-semibold text-xs">
-              ✓ Plaatsing bevestigd
-              {assignmentResult.confirmedAt && (
-                <span className="opacity-75">
-                  — {new Date(assignmentResult.confirmedAt).toLocaleDateString('nl-NL')}
-                </span>
-              )}
-            </span>
-          ) : (
-            onConfirm && (
-              <button
-                type="button"
-                onClick={onConfirm}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-500 hover:bg-blue-400 text-white font-semibold text-xs cursor-pointer transition-colors"
-              >
-                ✓ Bevestig plaatsing
-              </button>
-            )
-          )
-        )}
+        {/* Confirmation status removed — changes are saved to Supabase immediately */}
 
         {user && (
           <>
