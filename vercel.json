@@ -9,8 +9,17 @@
     "api/seed.ts": {
       "maxDuration": 30,
       "includeFiles": "public/**"
-    }
+    },
+    "api/assignment.ts":      { "maxDuration": 30 },
+    "api/paintings.ts":       { "maxDuration": 30 },
+    "api/paintings/[id].ts":  { "maxDuration": 30 },
+    "api/racks.ts":           { "maxDuration": 30 },
+    "api/rack-types.ts":      { "maxDuration": 30 },
+    "api/suggest-rack.ts":    { "maxDuration": 30 },
+    "api/fill-suggestions.ts":{ "maxDuration": 30 },
+    "api/clear-all.ts":       { "maxDuration": 30 }
   }
 }
+
 
 

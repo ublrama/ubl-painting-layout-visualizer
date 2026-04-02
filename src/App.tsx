@@ -27,7 +27,7 @@ export default function App() {
   const authFetch = useAuthFetch();
 
   // SWR-backed assignment (from API)
-  const { assignment: apiAssignment, isLoading: apiLoading, mutate } = useAssignment();
+  const { assignment: apiAssignment, isLoading: apiLoading, mutate, invalidateCache } = useAssignment();
 
   // Keep a ref to the latest rack types so handlers can access without stale closures
   const rackTypesRef = useRef<RackType[]>([]);
@@ -305,7 +305,7 @@ export default function App() {
       {showDatabasePanel && (
         <DatabasePanel
           onClose={() => setShowDatabasePanel(false)}
-          onSeedComplete={() => { setLocalAssignment(null); void mutate(); }}
+          onSeedComplete={() => { setLocalAssignment(null); invalidateCache(); }}
         />
       )}
 

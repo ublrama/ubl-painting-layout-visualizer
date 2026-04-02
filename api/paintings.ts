@@ -29,8 +29,10 @@ export default async function handler(req: Request): Promise<Response> {
       const assigned   = url.searchParams.get('assigned') ?? 'all';
       const sort       = url.searchParams.get('sort') ?? 'signatuur';
       const order      = url.searchParams.get('order') ?? 'asc';
+      const limit      = Math.min(parseInt(url.searchParams.get('limit')  ?? '100', 10), 500);
+      const offset     = Math.max(parseInt(url.searchParams.get('offset') ?? '0',   10), 0);
 
-      let paintings = await getPaintings();
+      let { paintings, total } = await getPaintings({ limit: 500, offset: 0 }); // fetch full set for filtering
 
       if (search) {
         paintings = paintings.filter(
@@ -60,7 +62,13 @@ export default async function handler(req: Request): Promise<Response> {
         return order === 'desc' ? -cmp : cmp;
       });
 
-      return Response.json(paintings, { headers: CORS_HEADERS });
+      const filteredTotal = paintings.length;
+      const page = paintings.slice(offset, offset + limit);
+
+      return Response.json(
+        { paintings: page, total: filteredTotal, limit, offset },
+        { headers: CORS_HEADERS },
+      );
     }
 
     // ── POST ───────────────────────────────────────────────────────────────

@@ -9,12 +9,11 @@
 
 
 import { v4 as uuidv4 } from 'uuid';
-import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import type { Painting, RackType, Rack } from '../src/types';
 import { assignPaintingsToRacks } from './_lib/placement.js';
-import { setRacks, setAssignment } from './_lib/store.js';
+import { setRacks, setAssignment, clearAll, setPaintings } from './_lib/store.js';
 import { verifyClerkToken, getHeader } from './_lib/auth.js';
 
 const CORS_HEADERS = {
@@ -119,20 +118,28 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   try {
+    // Fail fast if Supabase credentials are not configured
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
+      return Response.json(
+        { error: 'Server misconfiguration: SUPABASE_URL and SUPABASE_SERVICE_KEY must be set in Vercel environment variables.' },
+        { status: 500, headers: CORS_HEADERS },
+      );
+    }
+
     // Require authentication
     const auth = await verifyClerkToken(req);
     if (!auth) {
       return Response.json({ error: 'Unauthorized' }, { status: 401, headers: CORS_HEADERS });
     }
 
-    // Clear existing data
-    const supabaseClient = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
-    await supabaseClient.from('placed_paintings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    await supabaseClient.from('paintings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    await supabaseClient.from('racks').delete().neq('name', '');
-    await supabaseClient.from('rack_types').delete().neq('id', 0);
-    await supabaseClient.from('assignment_state').upsert({ id: 1, confirmed_at: null }, { onConflict: 'id' });
+    console.log('[seed] ── authenticated, starting seed ──');
 
+    // ── Step 1: clear existing data ──────────────────────────────────────
+    console.log('[seed] step 1/5 – clearAll()');
+    await clearAll();
+    console.log('[seed] step 1/5 – clearAll() done');
+
+    // ── Step: read CSV sources ────────────────────────────────────────────
     const publicDir = join(process.cwd(), 'public');
     let paintingsCsv: string;
     let rackTypesCsv: string;
@@ -165,6 +172,11 @@ export default async function handler(req: Request): Promise<Response> {
     const rackTypes     = parseRackTypes(rackTypesCsv);
     const emptyRacks    = parseRacks(racksCsv, rackTypes);
 
+    console.log(`[seed] parsed  paintings=${rawPaintings.length}  rackTypes=${rackTypes.length}  racks=${emptyRacks.length}`);
+    console.log('[seed] rackTypes:', JSON.stringify(rackTypes));
+    console.log('[seed] racks:',     JSON.stringify(emptyRacks.map((r) => ({ name: r.name, typeId: r.rackType.id }))));
+    console.log('[seed] paintings sample (first 3):', JSON.stringify(rawPaintings.slice(0, 3)));
+
     // Add uuid + default fields
     const paintings: Painting[] = rawPaintings.map((p) => ({
       ...p,
@@ -177,6 +189,8 @@ export default async function handler(req: Request): Promise<Response> {
     // Run assignment algorithm
     const assignment = assignPaintingsToRacks(paintings, emptyRacks);
 
+    console.log(`[seed] assignment  placed=${assignment.racks.reduce((s, r) => s + r.paintings.length, 0)}  unassigned=${assignment.unassigned.length}`);
+
     // Set assignedRackName on each placed painting
     for (const rack of assignment.racks) {
       for (const pp of rack.paintings) {
@@ -188,27 +202,22 @@ export default async function handler(req: Request): Promise<Response> {
     }
 
     // Persist racks first (setRacks upserts rack_types then racks)
+    console.log(`[seed] step 2/5 – setRacks()  count=${emptyRacks.length}`);
     await setRacks(emptyRacks);
+    console.log('[seed] step 2/5 – setRacks() done');
 
-    // Bulk upsert all paintings in one call (avoids per-row timeout)
-    const paintingRows = paintings.map((p) => ({
-      id: p.id,
-      signatuur: p.signatuur,
-      collection: p.collection,
-      width: p.width,
-      height: p.height,
-      depth: p.depth,
-      assigned_rack_name: p.assignedRackName,
-      manually_placed: p.manuallyPlaced,
-      predefined_rack: p.predefinedRack ?? null,
-    }));
-    const { error: paintingsError } = await supabaseClient
-      .from('paintings')
-      .upsert(paintingRows, { onConflict: 'id' });
-    if (paintingsError) throw paintingsError;
+    // Bulk upsert all paintings via shared store (uses singleton + Accept-Encoding fix)
+    console.log(`[seed] step 3/5 – setPaintings()  count=${paintings.length}`);
+    console.log('[seed] paintings payload sample (first 3):', JSON.stringify(paintings.slice(0, 3)));
+    await setPaintings(paintings);
+    console.log('[seed] step 3/5 – setPaintings() done');
 
     // Persist assignment (placed_paintings + assignment_state)
+    console.log(`[seed] step 4/5 – setAssignment()  racks=${assignment.racks.length}`);
     await setAssignment(assignment);
+    console.log('[seed] step 4/5 – setAssignment() done');
+
+    console.log('[seed] ── seed complete ──');
 
     return Response.json(
       { ok: true, paintingCount: paintings.length, rackCount: emptyRacks.length },

@@ -2,13 +2,36 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuthFetch } from './useAuthFetch';
 import type { AssignmentResult } from '../types';
 
-const STORAGE_KEY = 'ubl-placement-confirmed';
+const STORAGE_KEY    = 'ubl-placement-confirmed';
+const CACHE_KEY      = 'ubl-assignment-cache';
+const CACHE_MAX_AGE  = 5 * 60 * 1000; // 5 minutes
+
+function readCache(): AssignmentResult | null {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const { data, ts } = JSON.parse(raw) as { data: AssignmentResult; ts: number };
+    if (Date.now() - ts > CACHE_MAX_AGE) return null;
+    return data;
+  } catch { return null; }
+}
+
+function writeCache(data: AssignmentResult) {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ data, ts: Date.now() })); }
+  catch { /* ignore quota errors */ }
+}
+
+function clearCache() {
+  try { localStorage.removeItem(CACHE_KEY); } catch { /* ignore */ }
+}
 
 export function useAssignment() {
   const authFetch = useAuthFetch();
-  const [assignment, setAssignment] = useState<AssignmentResult | null>(null);
+
+  // Seed state from cache so the UI is populated immediately
+  const [assignment, setAssignment] = useState<AssignmentResult | null>(() => readCache());
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<unknown>(null);
+  const [error, setError]         = useState<unknown>(null);
   const [isConfirmed, setIsConfirmed] = useState<boolean>(() => {
     try { return localStorage.getItem(STORAGE_KEY) === 'true'; }
     catch { return false; }
@@ -21,6 +44,7 @@ export function useAssignment() {
       if (res.ok) {
         const data = await res.json() as AssignmentResult;
         setAssignment(data);
+        writeCache(data);
         if (data.confirmedAt) {
           setIsConfirmed(true);
           try { localStorage.setItem(STORAGE_KEY, 'true'); } catch { /* ignore */ }
@@ -30,7 +54,7 @@ export function useAssignment() {
       }
     } catch (e) {
       setError(e);
-      setAssignment(null);
+      // Keep showing cached data on network error
     } finally {
       setIsLoading(false);
     }
@@ -46,11 +70,11 @@ export function useAssignment() {
       if (res.ok) {
         const data = await res.json() as AssignmentResult;
         setAssignment(data);
+        writeCache(data);
         setIsConfirmed(true);
         try { localStorage.setItem(STORAGE_KEY, 'true'); } catch { /* ignore */ }
       }
     } catch {
-      // Fallback to local state only
       setIsConfirmed(true);
       try { localStorage.setItem(STORAGE_KEY, 'true'); } catch { /* ignore */ }
     }
@@ -62,6 +86,7 @@ export function useAssignment() {
       if (res.ok) {
         const data = await res.json() as AssignmentResult;
         setAssignment(data);
+        writeCache(data);
         setIsConfirmed(false);
         try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
       }
@@ -69,6 +94,12 @@ export function useAssignment() {
       setIsConfirmed(false);
       try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
     }
+  }
+
+  // Call this after seeding/clearing so stale cache doesn't show old data
+  function invalidateCache() {
+    clearCache();
+    void mutate();
   }
 
   return {
@@ -79,5 +110,6 @@ export function useAssignment() {
     confirmAssignment,
     resetAssignment,
     mutate,
+    invalidateCache,
   };
 }

@@ -12,25 +12,102 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Painting, Rack, RackType, PlacedPainting, AssignmentResult } from '../../src/types';
 
+// ---------------------------------------------------------------------------
+// Singleton Supabase client
+// Re-using one client across warm serverless invocations avoids the cost of
+// re-initialising the SDK on every request.  A custom fetch wrapper adds an
+// explicit AbortController timeout so individual queries can never hang the
+// entire function – this is the root cause of the "never gets a response"
+// issue seen with Node.js 18+ undici + Supabase chunked responses.
+// ---------------------------------------------------------------------------
+let _supabaseClient: ReturnType<typeof createClient> | null = null;
+
 function getSupabase() {
+  if (_supabaseClient) return _supabaseClient;
+
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_KEY;
   if (!url || !key) {
     throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_KEY environment variables');
   }
-  return createClient(url, key);
+
+  _supabaseClient = createClient(url, key, {
+    auth: {
+      // Serverless functions have no session to persist or auto-refresh.
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+    global: {
+      headers: {
+        // *** ROOT-CAUSE FIX ***
+        // Supabase/Cloudflare returns responses as  Transfer-Encoding: chunked
+        // + Content-Encoding: gzip.  Node.js 18+ undici (the native fetch
+        // implementation) has a known bug where it never fires the 'end' event
+        // when it has to decompress a chunked+gzip body, causing every
+        // supabase-js query to hang forever.
+        // Sending  Accept-Encoding: identity  tells Cloudflare to skip gzip,
+        // so the body arrives as plain chunked JSON that undici handles fine.
+        'Accept-Encoding': 'identity',
+      },
+      // Safety-net timeout: even if a future response somehow still hangs,
+      // abort after 9 s so the serverless function can surface the error
+      // instead of silently timing out.
+      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url    = typeof input === 'string' ? input : (input as Request).url ?? String(input);
+        const method = init?.method ?? 'GET';
+        const t0     = Date.now();
+
+        console.log(`[supabase → req]  ${method} ${url}`);
+        if (init?.body) {
+          try {
+            const preview = typeof init.body === 'string'
+              ? init.body.slice(0, 500)
+              : JSON.stringify(init.body).slice(0, 500);
+            console.log(`[supabase → body] ${preview}${preview.length === 500 ? '…' : ''}`);
+          } catch { /* non-serialisable body — skip */ }
+        }
+
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 9_000); // 9 s
+
+        try {
+          const res = await fetch(input as RequestInfo, { ...init, signal: controller.signal });
+          const elapsed = Date.now() - t0;
+          console.log(`[supabase ← res]  ${method} ${url} → ${res.status} (${elapsed} ms)`);
+
+          return res;
+        } catch (err) {
+          console.error(`[supabase ← err]  ${method} ${url} → ${String(err)} (${Date.now() - t0} ms)`);
+          throw err;
+        } finally {
+          clearTimeout(timer);
+        }
+      },
+    },
+  });
+
+  return _supabaseClient;
 }
 
 // ── Paintings ────────────────────────────────────────────────────────────────
 
-export async function getPaintings(): Promise<Painting[]> {
+export async function getPaintings(opts?: {
+  limit?: number;
+  offset?: number;
+}): Promise<{ paintings: Painting[]; total: number }> {
   const supabase = getSupabase();
-  const { data, error } = await supabase
+  const limit  = opts?.limit  ?? 100;
+  const offset = opts?.offset ?? 0;
+
+  const { data, error, count } = await supabase
     .from('paintings')
-    .select('*')
-    .order('signatuur', { ascending: true });
+    .select('*', { count: 'exact' })
+    .order('signatuur', { ascending: true })
+    .range(offset, offset + limit - 1);
+
   if (error) throw error;
-  return (data ?? []).map(rowToPainting);
+  return { paintings: (data ?? []).map(rowToPainting), total: count ?? 0 };
 }
 
 export async function setPaintings(paintings: Painting[]): Promise<void> {
@@ -90,7 +167,7 @@ export async function getRacks(): Promise<Rack[]> {
 export async function setRacks(racks: Rack[]): Promise<void> {
   const supabase = getSupabase();
   // Upsert rack_types first
-  const rackTypeRows = [...new Map(racks.map((r) => [r.rackType.id, r.rackType])).values()].map(
+  const rackTypeRows = Array.from(new Map(racks.map((r) => [r.rackType.id, r.rackType])).values()).map(
     (rt) => ({ id: rt.id, height: rt.height, width: rt.width, max_depth: rt.maxDepth }),
   );
   const { error: rtError } = await supabase
@@ -111,97 +188,157 @@ export async function setRacks(racks: Rack[]): Promise<void> {
 export async function getAssignment(): Promise<AssignmentResult | null> {
   const supabase = getSupabase();
 
-  // 1. Load all racks with their rack types
-  const racks = await getRacks();
-  const rackMap = new Map<string, Rack>(racks.map((r) => [r.name, { ...r, paintings: [] }]));
+  // ── 3 simple queries, no joins ────────────────────────────────────────
+  // Previously we used 4 queries including a heavy placed_paintings JOIN that
+  // embedded full painting rows (~76 KB, ~1 s).  Now we:
+  //   1. Fetch placed_paintings without any join  → tiny (~10 KB)
+  //   2. Fetch ALL paintings in one shot          → moderate (~50 KB, no join)
+  //   3. Merge positions into paintings in memory → O(n) client-side
+  // This cuts the total payload and removes the expensive PostgREST JOIN.
+  console.log('[getAssignment] starting 3 parallel queries (no join)');
+  const t0 = Date.now();
 
-  // 2. Load placed paintings with painting details
-  const { data: placedRows, error: placedError } = await supabase
-    .from('placed_paintings')
-    .select('id, rack_name, x, y, paintings(id, signatuur, collection, width, height, depth, assigned_rack_name, manually_placed, predefined_rack)');
-  if (placedError) throw placedError;
+  const [racksResult, placedResult, paintingsResult, stateResult] = await Promise.all([
+    supabase
+      .from('racks')
+      .select('name, rack_type_id, rack_types(id, height, width, max_depth)'),
+    supabase
+      .from('placed_paintings')
+      .select('id, rack_name, x, y'),               // ← no paintings() join
+    supabase
+      .from('paintings')
+      .select('*'),                                  // ← all paintings in one query
+    supabase
+      .from('assignment_state')
+      .select('confirmed_at')
+      .eq('id', 1)
+      .single(),
+  ]);
 
-  for (const row of placedRows ?? []) {
-    const p = row.paintings as any;
-    if (!p) continue;
-    const placed: PlacedPainting = {
-      id: p.id,
-      signatuur: p.signatuur,
-      collection: p.collection,
-      width: p.width,
-      height: p.height,
-      depth: p.depth,
-      assignedRackName: p.assigned_rack_name,
-      manuallyPlaced: p.manually_placed,
-      predefinedRack: p.predefined_rack ?? null,
-      x: row.x,
-      y: row.y,
-    };
-    const rack = rackMap.get(row.rack_name);
-    if (rack) rack.paintings.push(placed);
+  console.log(`[getAssignment] Promise.all resolved in ${Date.now() - t0} ms`);
+
+  // ── Log each query outcome ─────────────────────────────────────────────
+  console.log('[getAssignment] racks       →', racksResult.error
+    ? `ERROR: ${JSON.stringify(racksResult.error)}`
+    : `${racksResult.data?.length ?? 0} rows`);
+  console.log('[getAssignment] placed      →', placedResult.error
+    ? `ERROR: ${JSON.stringify(placedResult.error)}`
+    : `${placedResult.data?.length ?? 0} rows (no join)`);
+  console.log('[getAssignment] paintings   →', paintingsResult.error
+    ? `ERROR: ${JSON.stringify(paintingsResult.error)}`
+    : `${paintingsResult.data?.length ?? 0} rows`);
+  console.log('[getAssignment] state       →', stateResult.error
+    ? `ERROR code=${stateResult.error.code}: ${stateResult.error.message}`
+    : `confirmedAt=${stateResult.data?.confirmed_at ?? null}`);
+
+  if (racksResult.error)    throw racksResult.error;
+  if (placedResult.error)   throw placedResult.error;
+  if (paintingsResult.error) throw paintingsResult.error;
+  if (stateResult.error && stateResult.error.code !== 'PGRST116') throw stateResult.error;
+
+  // ── Build painting lookup map (id → row) ──────────────────────────────
+  const paintingMap = new Map<string, any>(
+    (paintingsResult.data ?? []).map((r: any) => [r.id, r]),
+  );
+
+  // ── Build rack map ─────────────────────────────────────────────────────
+  const rackMap = new Map<string, Rack>();
+  for (const row of racksResult.data ?? []) {
+    if (!row.rack_types) {
+      console.warn(`[getAssignment] rack "${row.name}" missing rack_type — skipping`);
+      continue;
+    }
+    rackMap.set(row.name, {
+      name: row.name,
+      rackType: {
+        id:       row.rack_types.id,
+        height:   row.rack_types.height,
+        width:    row.rack_types.width,
+        maxDepth: row.rack_types.max_depth,
+      } as RackType,
+      paintings: [],
+    });
   }
 
-  // 3. Load unassigned paintings
-  const { data: unassignedRows, error: uaError } = await supabase
-    .from('paintings')
-    .select('*')
-    .is('assigned_rack_name', null);
-  if (uaError) throw uaError;
+  // ── Merge positions into paintings and slot into racks ─────────────────
+  let skipped = 0;
+  for (const row of placedResult.data ?? []) {
+    const pRow = paintingMap.get(row.id);
+    if (!pRow) { skipped++; continue; }
+    const rack = rackMap.get(row.rack_name);
+    if (!rack)  { skipped++; continue; }
+    rack.paintings.push({ ...rowToPainting(pRow), x: row.x, y: row.y } as PlacedPainting);
+  }
+  if (skipped) console.warn(`[getAssignment] skipped ${skipped} placed paintings (missing rack or painting row)`);
 
-  const unassigned: Painting[] = (unassignedRows ?? []).map(rowToPainting);
+  // ── Unassigned = paintings not referenced in placed_paintings ──────────
+  const placedIds = new Set((placedResult.data ?? []).map((r: any) => r.id));
+  const unassigned: Painting[] = (paintingsResult.data ?? [])
+    .filter((r: any) => !placedIds.has(r.id))
+    .map(rowToPainting);
 
-  // 4. Load assignment state (confirmedAt)
-  const { data: stateRow, error: stateError } = await supabase
-    .from('assignment_state')
-    .select('confirmed_at')
-    .eq('id', 1)
-    .single();
-  if (stateError && stateError.code !== 'PGRST116') throw stateError;
-
-  return {
+  const result: AssignmentResult = {
     racks: Array.from(rackMap.values()),
     unassigned,
-    confirmedAt: stateRow?.confirmed_at ?? null,
+    confirmedAt: stateResult.data?.confirmed_at ?? null,
   };
+
+  console.log(
+    `[getAssignment] done in ${Date.now() - t0} ms total —` +
+    ` racks=${result.racks.length}` +
+    `  totalPlaced=${result.racks.reduce((s, r) => s + r.paintings.length, 0)}` +
+    `  unassigned=${result.unassigned.length}` +
+    `  confirmedAt=${result.confirmedAt}`,
+  );
+
+  return result;
 }
 
 export async function setAssignment(assignment: AssignmentResult): Promise<void> {
   const supabase = getSupabase();
 
-  // 1. Delete all existing placed_paintings.
-  // Supabase requires a WHERE clause; .neq() with the nil UUID effectively
-  // matches all rows since real UUIDs are never all-zeros.
+  // 1. Delete all existing placed_paintings in one call
   const { error: delError } = await supabase
     .from('placed_paintings')
     .delete()
     .neq('id', '00000000-0000-0000-0000-000000000000');
   if (delError) throw delError;
 
-  // 2. Update paintings.assigned_rack_name = null for all unassigned
-  const unassignedIds = assignment.unassigned.map((p) => p.id);
-  if (unassignedIds.length > 0) {
-    await supabase.from('paintings').update({ assigned_rack_name: null }).in('id', unassignedIds);
-  }
-
-  // 3. Insert placed_paintings and update paintings.assigned_rack_name
+  // 2. Collect ALL placed paintings across every rack into one array
+  const allPlacedRows: { id: string; rack_name: string; x: number; y: number }[] = [];
   for (const rack of assignment.racks) {
-    if (rack.paintings.length === 0) continue;
-    const placedRows = rack.paintings.map((p) => ({
-      id: p.id,
-      rack_name: rack.name,
-      x: p.x,
-      y: p.y,
-    }));
-    const { error: insertError } = await supabase
-      .from('placed_paintings')
-      .upsert(placedRows, { onConflict: 'id' });
-    if (insertError) throw insertError;
-
-    const ids = rack.paintings.map((p) => p.id);
-    await supabase.from('paintings').update({ assigned_rack_name: rack.name }).in('id', ids);
+    for (const p of rack.paintings) {
+      allPlacedRows.push({ id: p.id, rack_name: rack.name, x: p.x, y: p.y });
+    }
   }
 
-  // 4. Update confirmedAt
+  // 3. Single bulk upsert for all placed_paintings (avoids N round-trips)
+  if (allPlacedRows.length > 0) {
+    const { error } = await supabase
+      .from('placed_paintings')
+      .upsert(allPlacedRows, { onConflict: 'id' });
+    if (error) throw error;
+  }
+
+  // 4. Update paintings.assigned_rack_name — run all in parallel
+  const unassignedIds = assignment.unassigned.map((p) => p.id);
+  const rackUpdates = assignment.racks
+    .filter((rack) => rack.paintings.length > 0)
+    .map((rack) =>
+      supabase
+        .from('paintings')
+        .update({ assigned_rack_name: rack.name })
+        .in('id', rack.paintings.map((p) => p.id)),
+    );
+
+  await Promise.all([
+    ...(unassignedIds.length > 0
+      ? [supabase.from('paintings').update({ assigned_rack_name: null }).in('id', unassignedIds)]
+      : []),
+    ...rackUpdates,
+  ]);
+
+  // 5. Persist confirmedAt
   const { error: stateError } = await supabase
     .from('assignment_state')
     .upsert({ id: 1, confirmed_at: assignment.confirmedAt }, { onConflict: 'id' });

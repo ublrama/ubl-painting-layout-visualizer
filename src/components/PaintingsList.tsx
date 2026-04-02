@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { AssignmentResult, Painting } from '../types';
 import { COLLECTION_COLORS } from '../constants';
 import { usePaintings } from '../hooks/usePaintings';
@@ -8,6 +8,8 @@ import { getPlacementFailReason, FAIL_REASON_COLORS } from '../utils/getPlacemen
 
 type AssignedFilter = 'all' | 'assigned' | 'unassigned';
 type SortField = 'signatuur' | 'width' | 'height' | 'depth' | 'collection';
+
+const PAGE_SIZE = 50;
 
 interface PaintingsListProps {
   assignmentResult: AssignmentResult | null;
@@ -26,6 +28,10 @@ export function PaintingsList({ assignmentResult, onSelectRack, onAddPainting, o
   const [sortOrder,        setSortOrder]    = useState<'asc' | 'desc'>('asc');
   const [showAdd,          setShowAdd]      = useState(false);
   const [assignTarget,     setAssignTarget] = useState<Painting | null>(null);
+  const [page,             setPage]         = useState(0);
+
+  // Reset to page 0 whenever filters or sort change
+  useEffect(() => { setPage(0); }, [search, assignedFilter, collectionFilter, sortField, sortOrder]);
 
   const assignedParam =
     assignedFilter === 'assigned'   ? 'true'  :
@@ -40,7 +46,9 @@ export function PaintingsList({ assignmentResult, onSelectRack, onAddPainting, o
     order:      sortOrder,
   });
 
-  const unassignedCount = paintings.filter((p: Painting) => p.assignedRackName === null).length;
+  const totalPages       = Math.max(1, Math.ceil(paintings.length / PAGE_SIZE));
+  const visiblePaintings = paintings.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const unassignedCount  = paintings.filter((p: Painting) => p.assignedRackName === null).length;
 
   function toggleSort(field: SortField) {
     if (sortField === field) {
@@ -167,7 +175,7 @@ export function PaintingsList({ assignmentResult, onSelectRack, onAddPainting, o
                 </td>
               </tr>
             )}
-            {paintings.map((p: Painting) => {
+            {visiblePaintings.map((p: Painting) => {
               const color = COLLECTION_COLORS[p.collection] ?? COLLECTION_COLORS['Unknown'];
               const isUnassigned = p.assignedRackName === null;
               return (
@@ -275,6 +283,43 @@ export function PaintingsList({ assignmentResult, onSelectRack, onAddPainting, o
             })}
           </tbody>
         </table>
+      </div>
+
+      {/* Pagination controls */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mt-4">
+        <div className="text-sm text-gray-500">
+          {`Pagina ${page + 1} van ${totalPages}`}
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setPage(0)}
+            disabled={page === 0}
+            className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50"
+          >
+            Eerste
+          </button>
+          <button
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            disabled={page === 0}
+            className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50"
+          >
+            Vorige
+          </button>
+          <button
+            onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+            disabled={page >= totalPages - 1}
+            className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50"
+          >
+            Volgende
+          </button>
+          <button
+            onClick={() => setPage(totalPages - 1)}
+            disabled={page >= totalPages - 1}
+            className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50"
+          >
+            Laatste
+          </button>
+        </div>
       </div>
 
       {showAdd && onAddPainting && (

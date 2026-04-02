@@ -27,9 +27,32 @@ export function DatabasePanel({ onClose, onSeedComplete }: DatabasePanelProps) {
   const [showAddRT, setShowAddRT] = useState(false);
   const [editRT, setEditRT] = useState<RackType | null>(null);
 
+  type DbStatus = 'checking' | 'ok' | 'error' | 'unavailable';
+  const [dbStatus, setDbStatus] = useState<DbStatus>('checking');
+  const [dbStatusMsg, setDbStatusMsg] = useState('');
+
   useEffect(() => {
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = ''; };
+  }, []);
+
+  // Check Supabase connection on mount
+  useEffect(() => {
+    fetch('/api/health')
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.ok) {
+          setDbStatus('ok');
+          setDbStatusMsg(`Verbonden`);
+        } else {
+          setDbStatus('error');
+          setDbStatusMsg(data.error ?? `Fout (${data.stage ?? 'onbekend'})`);
+        }
+      })
+      .catch(() => {
+        setDbStatus('unavailable');
+        setDbStatusMsg('API niet bereikbaar');
+      });
   }, []);
 
   // Fetch rack types when that tab is shown
@@ -46,17 +69,23 @@ export function DatabasePanel({ onClose, onSeedComplete }: DatabasePanelProps) {
     setRtLoading(false);
   }
 
+  /** Safely parse a response body as JSON; returns {} on empty or non-JSON bodies. */
+  async function safeJson(res: Response): Promise<Record<string, unknown>> {
+    try { return await res.json(); } catch { return {}; }
+  }
+
   async function handleSeedDefault() {
     setState('loading'); setMessage('');
     try {
       const res = await authFetch('/api/seed', { method: 'POST' });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (res.ok) {
         setMessage(`✓ ${data.paintingCount} schilderijen en ${data.rackCount} rekken geladen`);
         setState('success');
         setTimeout(() => { onSeedComplete(); onClose(); }, 1500);
       } else {
-        setMessage(`Fout: ${data.error ?? data.detail ?? 'Onbekende fout'}`); setState('error');
+        setMessage(`Fout: ${(data.error ?? data.detail ?? (res.status === 404 ? 'API niet beschikbaar (gebruik vercel dev)' : 'Onbekende fout')) as string}`);
+        setState('error');
       }
     } catch (e) { setMessage(`Fout: ${String(e)}`); setState('error'); }
   }
@@ -70,13 +99,14 @@ export function DatabasePanel({ onClose, onSeedComplete }: DatabasePanelProps) {
       if (rackTypesFile) formData.append('rackTypes', rackTypesFile);
       if (racksFile) formData.append('racks', racksFile);
       const res = await authFetch('/api/seed', { method: 'POST', body: formData });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (res.ok) {
         setMessage(`✓ ${data.paintingCount} schilderijen en ${data.rackCount} rekken geladen`);
         setState('success');
         setTimeout(() => { onSeedComplete(); onClose(); }, 1500);
       } else {
-        setMessage(`Fout: ${data.error ?? data.detail ?? 'Onbekende fout'}`); setState('error');
+        setMessage(`Fout: ${(data.error ?? data.detail ?? 'Onbekende fout') as string}`);
+        setState('error');
       }
     } catch (e) { setMessage(`Fout: ${String(e)}`); setState('error'); }
   }
@@ -131,7 +161,23 @@ export function DatabasePanel({ onClose, onSeedComplete }: DatabasePanelProps) {
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-gray-100 shrink-0">
-          <h3 className="text-base font-semibold text-gray-900">🗄️ Database beheer</h3>
+          <div className="flex items-center gap-3">
+            <h3 className="text-base font-semibold text-gray-900">🗄️ Database beheer</h3>
+            <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full ${
+              dbStatus === 'ok'          ? 'bg-green-100 text-green-700' :
+              dbStatus === 'checking'    ? 'bg-gray-100 text-gray-500' :
+              dbStatus === 'unavailable' ? 'bg-yellow-100 text-yellow-700' :
+                                           'bg-red-100 text-red-700'
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${
+                dbStatus === 'ok'          ? 'bg-green-500' :
+                dbStatus === 'checking'    ? 'bg-gray-400 animate-pulse' :
+                dbStatus === 'unavailable' ? 'bg-yellow-500' :
+                                             'bg-red-500'
+              }`} />
+              {dbStatus === 'checking' ? 'Verbinden…' : dbStatusMsg}
+            </span>
+          </div>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
         </div>
 

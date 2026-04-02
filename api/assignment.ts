@@ -52,11 +52,25 @@ export default async function handler(req: Request): Promise<Response> {
 
     // ── GET /api/assignment ────────────────────────────────────────────────
     if (req.method === 'GET') {
+      const reqStart = Date.now();
+      console.log('[assignment] GET start');
+
       const assignment = await getAssignment();
+      console.log(`[assignment] getAssignment() returned in ${Date.now() - reqStart} ms`);
+
       if (!assignment) {
         return Response.json(null, { status: 200, headers: CORS_HEADERS });
       }
-      return Response.json(assignment, { headers: CORS_HEADERS });
+
+      const serialiseStart = Date.now();
+      const body = JSON.stringify(assignment);
+      console.log(`[assignment] JSON.stringify took ${Date.now() - serialiseStart} ms  (${body.length} chars)`);
+      console.log(`[assignment] total handler time ${Date.now() - reqStart} ms`);
+
+      return new Response(body, {
+        status: 200,
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
     }
 
     return Response.json({ error: 'Method not allowed' }, { status: 405, headers: CORS_HEADERS });
