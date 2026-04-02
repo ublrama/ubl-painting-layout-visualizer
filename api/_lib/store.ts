@@ -10,7 +10,20 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import { Agent } from 'undici';
 import type { Painting, Rack, RackType, PlacedPainting, AssignmentResult } from '../../src/types';
+
+// ── Custom undici agent with keepalive fully disabled ────────────────────────
+// This is the ONLY way to prevent 30s timeouts in Vercel serverless functions.
+// Node.js 18+ fetch (via undici) ignores the keepalive: false option and pools
+// connections with 5-second keepalive timers. Those timers block the event loop
+// from becoming empty, so Vercel waits the full 30s timeout before killing the
+// function. Setting keepAliveTimeout: 0 forces connections to close immediately.
+const httpAgent = new Agent({
+  keepAliveTimeout: 0,          // close idle connections immediately
+  keepAliveMaxTimeout: 0,       // no keepalive at all
+  pipelining: 0,                // disable HTTP pipelining (not needed for our use case)
+});
 
 // ---------------------------------------------------------------------------
 // Singleton Supabase client
@@ -73,14 +86,15 @@ function getSupabase() {
 
         try {
           // *** CRITICAL FIX for production 504 timeouts ***
-          // Set keepalive: false so HTTP connections close immediately.
-          // Without this, Node.js keeps connection-pool timers alive for
-          // 5+ seconds even after the handler returns, preventing the
-          // serverless function from terminating cleanly (→ 30s timeout).
+          // Pass the custom undici agent with keepalive disabled as the
+          // dispatcher. This forces connections to close immediately at the
+          // TCP level, preventing connection-pool timers from blocking the
+          // serverless function from terminating.
           const res = await fetch(input as RequestInfo, {
             ...init,
             signal: controller.signal,
-            keepalive: false,
+            // @ts-ignore — dispatcher is undici-specific, not in standard fetch types
+            dispatcher: httpAgent,
           });
           const elapsed = Date.now() - t0;
           console.log(`[supabase ← res]  ${method} ${url} → ${res.status} (${elapsed} ms)`);
