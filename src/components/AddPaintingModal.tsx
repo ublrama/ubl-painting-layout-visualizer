@@ -6,17 +6,17 @@ import { ReorganisationPanel } from './ReorganisationPanel';
 const COLLECTIONS = ['UBL', 'KITLV', 'BWB', 'AHM', 'Bilderdijk', 'Unknown'];
 
 interface AddPaintingModalProps {
-  initialRackName?: string;     // pre-select a rack (from RackDetail)
-  isConfirmed?: boolean;        // assignment frozen — show warning
+  initialRackName?: string;
   onSave: (data: Omit<Painting, 'id' | 'manuallyPlaced'>) => Promise<void>;
   onCancel: () => void;
 }
 
 type Step = 'form' | 'rack';
 
+// ...existing code...
+
 export function AddPaintingModal({
   initialRackName,
-  isConfirmed,
   onSave,
   onCancel,
 }: AddPaintingModalProps) {
@@ -113,13 +113,6 @@ export function AddPaintingModal({
             ×
           </button>
         </div>
-
-        {/* Confirmed warning */}
-        {isConfirmed && (
-          <div className="mx-5 mt-4 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-sm text-amber-800">
-            ⚠️ De plaatsing is bevestigd. Wijzigingen zijn handmatig.
-          </div>
-        )}
 
         {/* Step 1 — Form */}
         {step === 'form' && (

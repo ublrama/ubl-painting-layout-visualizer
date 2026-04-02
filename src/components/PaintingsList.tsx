@@ -11,7 +11,6 @@ type SortField = 'signatuur' | 'width' | 'height' | 'depth' | 'collection';
 
 interface PaintingsListProps {
   assignmentResult: AssignmentResult | null;
-  isConfirmed?: boolean;
   onSelectRack?: (rackIndex: number) => void;
   onAddPainting?: (data: Omit<Painting, 'id' | 'manuallyPlaced'>) => Promise<void>;
   onUnassignPainting?: (paintingId: string) => Promise<void>;
@@ -19,7 +18,7 @@ interface PaintingsListProps {
   onDeletePainting?: (paintingId: string) => Promise<void>;
 }
 
-export function PaintingsList({ assignmentResult, isConfirmed, onSelectRack, onAddPainting, onUnassignPainting, onAssignPainting, onDeletePainting }: PaintingsListProps) {
+export function PaintingsList({ assignmentResult, onSelectRack, onAddPainting, onUnassignPainting, onAssignPainting, onDeletePainting }: PaintingsListProps) {
   const [search,           setSearch]       = useState('');
   const [assignedFilter,   setAssignedFilter] = useState<AssignedFilter>('all');
   const [collectionFilter, setCollFilter]   = useState('');
@@ -280,7 +279,6 @@ export function PaintingsList({ assignmentResult, isConfirmed, onSelectRack, onA
 
       {showAdd && onAddPainting && (
         <AddPaintingModal
-          isConfirmed={isConfirmed}
           onSave={async (data) => {
             await onAddPainting(data);
             setShowAdd(false);

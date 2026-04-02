@@ -261,7 +261,6 @@ export default function App() {
           {activeTab === 'paintings' ? (
             <PaintingsList
               assignmentResult={assignmentResult}
-              isConfirmed={isConfirmed}
               onAddPainting={handleAddPainting}
               onSelectRack={(index) => {
                 setActiveTab('racks');
@@ -286,7 +285,6 @@ export default function App() {
                 rackIndex={currentRackIndex}
                 totalRacks={assignmentResult.racks.length}
                 zoom={zoom}
-                isConfirmed={isConfirmed}
                 onBack={() => setView({ kind: 'dashboard' })}
                 onPrev={() => goToRack(Math.max(0, currentRackIndex - 1))}
                 onNext={() =>
@@ -314,7 +312,6 @@ export default function App() {
       {showAddPaintingForRack && (
         <AddPaintingModal
           initialRackName={showAddPaintingForRack}
-          isConfirmed={isConfirmed}
           onSave={async (data) => {
             await handleAddPainting(data);
             setShowAddPaintingForRack(null);
