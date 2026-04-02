@@ -5,9 +5,9 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import type { Painting, PlacedPainting } from '../src/types';
-import { getPaintings, upsertPainting, getAssignment, setAssignment } from './_lib/store';
-import { buildShelfState, tryPlace } from './_lib/placement';
-import { verifyClerkToken, unauthorized } from './_lib/auth';
+import { getPaintings, upsertPainting, getAssignment, setAssignment } from './_lib/store.js';
+import { buildShelfState, tryPlace } from './_lib/placement.js';
+import { verifyClerkToken, unauthorized } from './_lib/auth.js';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',

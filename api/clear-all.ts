@@ -2,8 +2,8 @@
  * POST /api/clear-all — delete all data (paintings, racks, rack types, assignment state)
  */
 
-import { clearAll } from './_lib/store';
-import { verifyClerkToken, unauthorized } from './_lib/auth';
+import { clearAll } from './_lib/store.js';
+import { verifyClerkToken, unauthorized } from './_lib/auth.js';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',

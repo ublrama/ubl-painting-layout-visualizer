@@ -7,7 +7,7 @@
  */
 
 import type { FillSuggestion } from '../src/types';
-import { getAssignment, getPaintings } from './_lib/store';
+import { getAssignment, getPaintings } from './_lib/store.js';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',

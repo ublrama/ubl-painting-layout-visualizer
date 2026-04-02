@@ -4,8 +4,8 @@
  * POST /api/assignment/reset   — unfreeze the assignment (admin)
  */
 
-import { getAssignment, setAssignment } from './_lib/store';
-import { verifyClerkToken, unauthorized } from './_lib/auth';
+import { getAssignment, setAssignment } from './_lib/store.js';
+import { verifyClerkToken, unauthorized } from './_lib/auth.js';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',

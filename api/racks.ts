@@ -4,8 +4,8 @@
  * DELETE  /api/racks?name=   — delete a rack
  */
 
-import { getAssignment, getRacks, upsertSingleRack, deleteRack, getRackTypes } from './_lib/store';
-import { verifyClerkToken, unauthorized } from './_lib/auth';
+import { getAssignment, getRacks, upsertSingleRack, deleteRack, getRackTypes } from './_lib/store.js';
+import { verifyClerkToken, unauthorized } from './_lib/auth.js';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',

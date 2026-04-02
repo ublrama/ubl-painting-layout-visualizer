@@ -9,8 +9,8 @@
  */
 
 import type { Painting, PlacedPainting, RackSuggestion, ForcePlacementResult, MoveSuggestion } from '../src/types';
-import { getAssignment, getPaintings } from './_lib/store';
-import { buildShelfState, tryPlace } from './_lib/placement';
+import { getAssignment, getPaintings } from './_lib/store.js';
+import { buildShelfState, tryPlace } from './_lib/placement.js';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',

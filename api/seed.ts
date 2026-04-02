@@ -13,9 +13,9 @@ import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import type { Painting, RackType, Rack } from '../src/types';
-import { assignPaintingsToRacks } from './_lib/placement';
-import { setRacks, setAssignment } from './_lib/store';
-import { verifyClerkToken } from './_lib/auth';
+import { assignPaintingsToRacks } from './_lib/placement.js';
+import { setRacks, setAssignment } from './_lib/store.js';
+import { verifyClerkToken } from './_lib/auth.js';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
