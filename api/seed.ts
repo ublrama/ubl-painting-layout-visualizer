@@ -3,11 +3,10 @@
  * One-time seeding endpoint. Reads CSV files, parses them, runs assignment,
  * and stores the result in Supabase.
  *
- * Protected by Clerk JWT verification.
+ * Protected by Supabase JWT verification.
  * Supports multipart/form-data with optional file fields: paintings, rackTypes, racks.
  */
 
-export const maxDuration = 30;
 
 import { v4 as uuidv4 } from 'uuid';
 import { createClient } from '@supabase/supabase-js';
@@ -16,7 +15,7 @@ import { join } from 'path';
 import type { Painting, RackType, Rack } from '../src/types';
 import { assignPaintingsToRacks } from './_lib/placement';
 import { setRacks, setAssignment } from './_lib/store';
-import { verifyClerkToken, unauthorized } from './_lib/auth';
+import { verifyClerkToken } from './_lib/auth';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -95,6 +94,19 @@ function parseRacks(csvText: string, rackTypes: RackType[]): Rack[] {
   return racks;
 }
 
+// ── File helper ──────────────────────────────────────────────────────────────
+
+function safeReadFile(filePath: string): string {
+  try {
+    return readFileSync(filePath, 'utf-8');
+  } catch {
+    throw new Error(
+      `Cannot read file: ${filePath}. ` +
+      `On Vercel, make sure "includeFiles": "public/**" is set in vercel.json under functions > api/seed.ts.`,
+    );
+  }
+}
+
 // ── Handler ──────────────────────────────────────────────────────────────────
 
 export default async function handler(req: Request): Promise<Response> {
@@ -106,19 +118,19 @@ export default async function handler(req: Request): Promise<Response> {
     return Response.json({ error: 'Method not allowed' }, { status: 405, headers: CORS_HEADERS });
   }
 
-  // Require Clerk JWT authentication
-  const auth = await verifyClerkToken(req);
-  if (!auth) return unauthorized();
-
   try {
-    // Clear existing data to allow re-seeding.
-    // Supabase requires a WHERE clause for DELETE; .neq() with a value that no
-    // real row can have effectively means "delete all rows".
+    // Require authentication
+    const auth = await verifyClerkToken(req);
+    if (!auth) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401, headers: CORS_HEADERS });
+    }
+
+    // Clear existing data
     const supabaseClient = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
     await supabaseClient.from('placed_paintings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
     await supabaseClient.from('paintings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    await supabaseClient.from('racks').delete().neq('name', '');        // delete all rows (name is never empty)
-    await supabaseClient.from('rack_types').delete().neq('id', 0);      // delete all rows (type id starts at 1)
+    await supabaseClient.from('racks').delete().neq('name', '');
+    await supabaseClient.from('rack_types').delete().neq('id', 0);
     await supabaseClient.from('assignment_state').upsert({ id: 1, confirmed_at: null }, { onConflict: 'id' });
 
     const publicDir = join(process.cwd(), 'public');
@@ -137,12 +149,16 @@ export default async function handler(req: Request): Promise<Response> {
         return Response.json({ error: 'Missing paintings file' }, { status: 400, headers: CORS_HEADERS });
       }
       paintingsCsv = await paintingsBlob.text();
-      rackTypesCsv = rackTypesBlob ? await rackTypesBlob.text() : readFileSync(join(publicDir, 'demo-rack-types.csv'), 'utf-8');
-      racksCsv = racksBlob ? await racksBlob.text() : readFileSync(join(publicDir, 'demo-racks.csv'), 'utf-8');
+      rackTypesCsv = rackTypesBlob
+        ? await rackTypesBlob.text()
+        : safeReadFile(join(publicDir, 'demo-rack-types.csv'));
+      racksCsv = racksBlob
+        ? await racksBlob.text()
+        : safeReadFile(join(publicDir, 'demo-racks.csv'));
     } else {
-      paintingsCsv = readFileSync(join(publicDir, 'demo-paintings.csv'), 'utf-8');
-      rackTypesCsv = readFileSync(join(publicDir, 'demo-rack-types.csv'), 'utf-8');
-      racksCsv = readFileSync(join(publicDir, 'demo-racks.csv'), 'utf-8');
+      paintingsCsv = safeReadFile(join(publicDir, 'demo-paintings.csv'));
+      rackTypesCsv = safeReadFile(join(publicDir, 'demo-rack-types.csv'));
+      racksCsv     = safeReadFile(join(publicDir, 'demo-racks.csv'));
     }
 
     const rawPaintings  = parsePaintings(paintingsCsv);
