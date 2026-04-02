@@ -72,7 +72,16 @@ function getSupabase() {
         const timer = setTimeout(() => controller.abort(), 9_000); // 9 s
 
         try {
-          const res = await fetch(input as RequestInfo, { ...init, signal: controller.signal });
+          // *** CRITICAL FIX for production 504 timeouts ***
+          // Set keepalive: false so HTTP connections close immediately.
+          // Without this, Node.js keeps connection-pool timers alive for
+          // 5+ seconds even after the handler returns, preventing the
+          // serverless function from terminating cleanly (→ 30s timeout).
+          const res = await fetch(input as RequestInfo, {
+            ...init,
+            signal: controller.signal,
+            keepalive: false,
+          });
           const elapsed = Date.now() - t0;
           console.log(`[supabase ← res]  ${method} ${url} → ${res.status} (${elapsed} ms)`);
 
