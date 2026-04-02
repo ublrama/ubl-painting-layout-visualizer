@@ -24,7 +24,7 @@ export default async function handler(req: Request): Promise<Response> {
     return Response.json({ error: 'Method not allowed' }, { status: 405, headers: CORS_HEADERS });
   }
 
-  const url        = new URL(req.url);
+  const url        = new URL(req.url, 'http://localhost');
   const rackName   = url.searchParams.get('rackName') ?? '';
   const freeWidth  = parseFloat(url.searchParams.get('removedPaintingWidth')  ?? '');
   const freeHeight = parseFloat(url.searchParams.get('removedPaintingHeight') ?? '');

@@ -18,45 +18,53 @@ export default async function handler(req: Request): Promise<Response> {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
   }
 
-  const url      = new URL(req.url);
-  const subPath  = url.pathname.replace(/^\/api\/assignment\/?/, '');
+  try {
+    const url      = new URL(req.url, 'http://localhost');
+    const subPath  = url.pathname.replace(/^\/api\/assignment\/?/, '');
 
-  // ── POST /api/assignment/confirm ─────────────────────────────────────────
-  if (req.method === 'POST' && subPath === 'confirm') {
-    const auth = await verifyClerkToken(req);
-    if (!auth) return unauthorized();
+    // ── POST /api/assignment/confirm ───────────────────────────────────────
+    if (req.method === 'POST' && subPath === 'confirm') {
+      const auth = await verifyClerkToken(req);
+      if (!auth) return unauthorized();
 
-    const assignment = await getAssignment();
-    if (!assignment) {
-      return Response.json({ error: 'No assignment found' }, { status: 404, headers: CORS_HEADERS });
+      const assignment = await getAssignment();
+      if (!assignment) {
+        return Response.json({ error: 'No assignment found' }, { status: 404, headers: CORS_HEADERS });
+      }
+      assignment.confirmedAt = new Date().toISOString();
+      await setAssignment(assignment);
+      return Response.json(assignment, { headers: CORS_HEADERS });
     }
-    assignment.confirmedAt = new Date().toISOString();
-    await setAssignment(assignment);
-    return Response.json(assignment, { headers: CORS_HEADERS });
-  }
 
-  // ── POST /api/assignment/reset ───────────────────────────────────────────
-  if (req.method === 'POST' && subPath === 'reset') {
-    const auth = await verifyClerkToken(req);
-    if (!auth) return unauthorized();
+    // ── POST /api/assignment/reset ─────────────────────────────────────────
+    if (req.method === 'POST' && subPath === 'reset') {
+      const auth = await verifyClerkToken(req);
+      if (!auth) return unauthorized();
 
-    const assignment = await getAssignment();
-    if (!assignment) {
-      return Response.json({ error: 'No assignment found' }, { status: 404, headers: CORS_HEADERS });
+      const assignment = await getAssignment();
+      if (!assignment) {
+        return Response.json({ error: 'No assignment found' }, { status: 404, headers: CORS_HEADERS });
+      }
+      assignment.confirmedAt = null;
+      await setAssignment(assignment);
+      return Response.json(assignment, { headers: CORS_HEADERS });
     }
-    assignment.confirmedAt = null;
-    await setAssignment(assignment);
-    return Response.json(assignment, { headers: CORS_HEADERS });
-  }
 
-  // ── GET /api/assignment ──────────────────────────────────────────────────
-  if (req.method === 'GET') {
-    const assignment = await getAssignment();
-    if (!assignment) {
-      return Response.json({ error: 'No assignment found' }, { status: 404, headers: CORS_HEADERS });
+    // ── GET /api/assignment ────────────────────────────────────────────────
+    if (req.method === 'GET') {
+      const assignment = await getAssignment();
+      if (!assignment) {
+        return Response.json(null, { status: 200, headers: CORS_HEADERS });
+      }
+      return Response.json(assignment, { headers: CORS_HEADERS });
     }
-    return Response.json(assignment, { headers: CORS_HEADERS });
-  }
 
-  return Response.json({ error: 'Method not allowed' }, { status: 405, headers: CORS_HEADERS });
+    return Response.json({ error: 'Method not allowed' }, { status: 405, headers: CORS_HEADERS });
+  } catch (err) {
+    console.error('[assignment] error:', err);
+    return Response.json(
+      { error: 'Internal server error', detail: String(err) },
+      { status: 500, headers: CORS_HEADERS },
+    );
+  }
 }

@@ -20,7 +20,7 @@ export default async function handler(req: Request): Promise<Response> {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
   }
 
-  const url = new URL(req.url);
+  const url = new URL(req.url, 'http://localhost');
   const id  = url.pathname.split('/').pop() ?? '';
 
   if (!id) {
