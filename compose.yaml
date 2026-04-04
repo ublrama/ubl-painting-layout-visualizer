@@ -7,7 +7,7 @@ services:
       - "5173:5173"
     volumes:
       - .:/app
-      - /app/node_modules
+      - node_modules:/app/node_modules
     environment:
       - NODE_ENV=development
 
@@ -21,3 +21,6 @@ services:
       - prod
     environment:
       - NODE_ENV=production
+
+volumes:
+  node_modules:

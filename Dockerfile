@@ -3,9 +3,13 @@ FROM node:20-alpine AS development
 
 WORKDIR /app
 
+# Copy package files
 COPY package.json package-lock.json* ./
+
+# Install dependencies (this will be cached unless package files change)
 RUN npm install
 
+# Copy source files (but node_modules will be preserved by volume mount)
 COPY . .
 
 EXPOSE 5173
