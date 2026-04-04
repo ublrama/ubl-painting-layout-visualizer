@@ -1,5 +1,6 @@
 # ---- Development Stage ----
 FROM node:20-alpine AS development
+LABEL railway.disable-cache=true
 
 WORKDIR /app
 
