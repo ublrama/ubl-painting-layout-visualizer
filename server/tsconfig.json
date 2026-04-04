@@ -10,14 +10,11 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "skipLibCheck": true,
-    // strict and noImplicitAny are disabled because the existing api/*.ts files
-    // use untyped Supabase generics (no Database type param) which produce errors
-    // under strict checking. Those files are not modified per project constraints.
     "strict": false,
     "noImplicitAny": false,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "resolveJsonModule": true
   },
-  "include": ["index.ts"]
+  "include": ["index.ts", "../api/**/*.ts"]
 }
