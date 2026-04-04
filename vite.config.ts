@@ -57,6 +57,8 @@ function apiRouterPlugin() {
               modulePath = '/api/fill-suggestions.ts';
             } else if (pathname === '/api/suggest-rack') {
               modulePath = '/api/suggest-rack.ts';
+            } else if (pathname === '/api/health' || pathname === '/api/health/') {
+              modulePath = '/api/health.ts';
             }
 
             if (modulePath) {
