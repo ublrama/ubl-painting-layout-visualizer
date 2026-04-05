@@ -10,7 +10,7 @@
 
 import type { Painting, PlacedPainting, RackSuggestion, ForcePlacementResult, MoveSuggestion } from '../src/types';
 import { getAssignment, getPaintings } from './_lib/store.js';
-import { buildShelfState, tryPlace } from './_lib/placement.js';
+import { buildPackState, tryPlace } from './_lib/placement.js';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -36,7 +36,7 @@ export default async function handler(req: Request): Promise<Response> {
 
     // ── Mode 2: force-place ──────────────────────────────────────────────
     if (paintingId && targetRack) {
-      const paintings = await getPaintings();
+      const { paintings } = await getPaintings();
       const painting  = paintings.find((p) => p.id === paintingId);
       if (!painting) {
         return Response.json({ error: 'Painting not found' }, { status: 404, headers: CORS_HEADERS });
@@ -45,25 +45,25 @@ export default async function handler(req: Request): Promise<Response> {
       if (!rack) {
         return Response.json({ error: 'Rack not found' }, { status: 404, headers: CORS_HEADERS });
       }
-      const directState      = buildShelfState([...(rack.paintings as PlacedPainting[])]);
-      const canPlaceDirectly = tryPlace(painting, directState, rack.rackType.width, rack.rackType.height);
+      const directState      = buildPackState([...(rack.paintings as PlacedPainting[])], rack.rackType.width, rack.rackType.height);
+      const canPlaceDirectly = tryPlace(painting, directState);
       if (canPlaceDirectly) {
         return Response.json({ canPlaceDirectly: true, moveSuggestions: [] } as ForcePlacementResult, { headers: CORS_HEADERS });
       }
       const moveSuggestions: MoveSuggestion[] = [];
       for (const rackPainting of rack.paintings) {
         const remaining = rack.paintings.filter((p) => p.id !== rackPainting.id) as Painting[];
-        const testShelf = buildShelfState([]);
-        for (const p of remaining) { tryPlace(p, testShelf, rack.rackType.width, rack.rackType.height); }
-        const fitsAfterRemoval = tryPlace(painting, testShelf, rack.rackType.width, rack.rackType.height);
+        const testState = buildPackState([], rack.rackType.width, rack.rackType.height);
+        for (const p of remaining) { tryPlace(p, testState); }
+        const fitsAfterRemoval = tryPlace(painting, testState);
         if (fitsAfterRemoval) {
           let suggestedRackName = '';
           let canFit            = false;
           for (const altRack of assignment.racks) {
             if (altRack.name === targetRack) continue;
             if (altRack.rackType.maxDepth < rackPainting.depth) continue;
-            const altState = buildShelfState([...(altRack.paintings as PlacedPainting[])]);
-            if (tryPlace(rackPainting, altState, altRack.rackType.width, altRack.rackType.height)) {
+            const altState = buildPackState([...(altRack.paintings as PlacedPainting[])], altRack.rackType.width, altRack.rackType.height);
+            if (tryPlace(rackPainting, altState)) {
               suggestedRackName = altRack.name;
               canFit            = true;
               break;
@@ -89,8 +89,8 @@ export default async function handler(req: Request): Promise<Response> {
       if (rack.rackType.maxDepth < depth) continue;
       const totalArea = rack.rackType.width * rack.rackType.height;
       const usedArea  = rack.paintings.reduce((s, p) => s + p.width * p.height, 0);
-      const testState = buildShelfState([...(rack.paintings as PlacedPainting[])]);
-      const canFit    = tryPlace(mockPainting, testState, rack.rackType.width, rack.rackType.height);
+      const testState = buildPackState([...(rack.paintings as PlacedPainting[])], rack.rackType.width, rack.rackType.height);
+      const canFit    = tryPlace(mockPainting, testState);
       suggestions.push({ rackName: rack.name, rackType: rack.rackType, paintingCount: rack.paintings.length, canFit, remainingArea: totalArea - usedArea });
     }
     suggestions.sort((a, b) => { if (a.canFit !== b.canFit) return a.canFit ? -1 : 1; return a.paintingCount - b.paintingCount; });

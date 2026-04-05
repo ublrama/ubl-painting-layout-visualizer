@@ -122,10 +122,7 @@ export function RackDetail({
                 {onUnassignPainting && (
                   <button
                     type="button"
-                    onClick={() => {
-                      if (confirm(`"${p.signatuur}" verwijderen van dit rek? Het schilderij wordt niet gewist, alleen niet-toegewezen.`))
-                        onUnassignPainting(p.id);
-                    }}
+                    onClick={() => onUnassignPainting(p.id)}
                     className="ml-2 text-red-500 hover:text-red-700 flex-shrink-0"
                     title="Verwijder van rek"
                   >
