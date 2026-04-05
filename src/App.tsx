@@ -14,6 +14,8 @@ import { RackDetail } from './components/RackDetail';
 import { PaintingsList } from './components/PaintingsList';
 import { AddPaintingModal } from './components/AddPaintingModal';
 import { DatabasePanel } from './components/DatabasePanel';
+import { UnassignPaintingDialog } from './components/UnassignPaintingDialog';
+import { RemovePaintingDialog } from './components/RemovePaintingDialog';
 import { SCALE } from './constants';
 
 type View =
@@ -34,6 +36,8 @@ export default function App() {
 
   const [showDatabasePanel, setShowDatabasePanel] = useState(false);
   const [showAddPaintingForRack, setShowAddPaintingForRack] = useState<string | null>(null);
+  const [paintingToUnassign, setPaintingToUnassign] = useState<{ painting: Painting; rackName: string } | null>(null);
+  const [paintingToDelete, setPaintingToDelete] = useState<Painting | null>(null);
 
   const [view, setView] = useState<View>({ kind: 'dashboard' });
   const [zoom, setZoom] = useState<number>(SCALE);
@@ -97,43 +101,77 @@ export default function App() {
   }
 
   async function handleDeletePainting(paintingId: string) {
-    try {
-      const res = await authFetch(`/api/paintings/${paintingId}`, { method: 'DELETE' });
-      if (res.ok) { await mutate(); return; }
-    } catch { /* fall through */ }
+    // Find the painting to get its details for the dialog
+    const allPaintings: Painting[] = assignmentResult ? [
+      ...assignmentResult.racks.flatMap((r) => r.paintings),
+      ...assignmentResult.unassigned,
+    ] : [];
+    const painting = allPaintings.find((p) => p.id === paintingId);
+    
+    if (!painting) {
+      console.error('Painting not found');
+      return;
+    }
 
-    setLocalAssignment((prev) => {
-      if (!prev) return prev;
-      const allPaintings: Painting[] = [
-        ...prev.racks.flatMap((r) => r.paintings),
-        ...prev.unassigned,
-      ].filter((p) => p.id !== paintingId);
-      const emptyRacks = prev.racks.map((r) => ({ ...r, paintings: [] }));
-      return assignPaintingsToRacks(allPaintings, emptyRacks);
-    });
+    // Open the dialog
+    setPaintingToDelete(painting);
+  }
+
+  async function performDeletePainting(): Promise<void> {
+    if (!paintingToDelete) return;
+    
+    try {
+      const res = await authFetch(`/api/paintings/${paintingToDelete.id}`, { method: 'DELETE' });
+      
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Fout bij verwijderen van het schilderij');
+      }
+      
+      await mutate();
+      setPaintingToDelete(null); // Close dialog on success
+    } catch (error) {
+      // Re-throw to let the dialog handle it
+      throw error;
+    }
   }
 
   async function handleUnassignPainting(paintingId: string) {
+    // Find the painting to get its details for the dialog
+    const allPaintings: Painting[] = assignmentResult ? [
+      ...assignmentResult.racks.flatMap((r) => r.paintings),
+      ...assignmentResult.unassigned,
+    ] : [];
+    const painting = allPaintings.find((p) => p.id === paintingId);
+    
+    if (!painting || !painting.assignedRackName) {
+      console.error('Painting not found or not assigned');
+      return;
+    }
+
+    // Open the dialog
+    setPaintingToUnassign({ painting, rackName: painting.assignedRackName });
+  }
+
+  async function performUnassignPainting(paintingId: string): Promise<void> {
     try {
       const res = await authFetch(`/api/paintings/${paintingId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ assignedRackName: null }),
       });
-      if (res.ok) { await mutate(); return; }
-    } catch { /* fall through */ }
-
-    setLocalAssignment((prev) => {
-      if (!prev) return prev;
-      const allPaintings: Painting[] = [
-        ...prev.racks.flatMap((r) => r.paintings),
-        ...prev.unassigned,
-      ];
-      const painting = allPaintings.find((p) => p.id === paintingId);
-      if (painting) painting.assignedRackName = null;
-      const emptyRacks = prev.racks.map((r) => ({ ...r, paintings: [] }));
-      return assignPaintingsToRacks(allPaintings, emptyRacks);
-    });
+      
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Fout bij loskoppelen van het schilderij');
+      }
+      
+      await mutate();
+      setPaintingToUnassign(null); // Close dialog on success
+    } catch (error) {
+      // Re-throw to let the dialog handle it
+      throw error;
+    }
   }
 
   async function handleAssignPainting(paintingId: string, rackName: string) {
@@ -317,6 +355,24 @@ export default function App() {
             setShowAddPaintingForRack(null);
           }}
           onCancel={() => setShowAddPaintingForRack(null)}
+        />
+      )}
+
+      {paintingToUnassign && (
+        <UnassignPaintingDialog
+          painting={paintingToUnassign.painting}
+          rackName={paintingToUnassign.rackName}
+          onUnassign={() => performUnassignPainting(paintingToUnassign.painting.id)}
+          onCancel={() => setPaintingToUnassign(null)}
+        />
+      )}
+
+      {paintingToDelete && (
+        <RemovePaintingDialog
+          painting={paintingToDelete}
+          rackName={paintingToDelete.assignedRackName}
+          onRemove={performDeletePainting}
+          onCancel={() => setPaintingToDelete(null)}
         />
       )}
     </div>

@@ -1,5 +1,5 @@
 import type { Painting, Rack } from '../types';
-import { PADDING } from '../constants';
+import { MARGIN } from '../constants';
 
 export type PlacementFailReason =
   | 'too-deep'         // depth exceeds maxDepth of every rack
@@ -56,7 +56,7 @@ export function getPlacementFailReason(
 
   // 3. Width check — wider than every depth-compatible rack
   const widthCompatible = depthCompatible.filter(
-    (r) => r.rackType.width >= painting.width + PADDING * 2,
+    (r) => r.rackType.width >= painting.width + MARGIN * 2,
   );
   if (widthCompatible.length === 0) {
     const maxAvailWidth = Math.max(...depthCompatible.map((r) => r.rackType.width));
@@ -69,7 +69,7 @@ export function getPlacementFailReason(
 
   // 4. Height check — taller than every width+depth compatible rack
   const sizeCompatible = widthCompatible.filter(
-    (r) => r.rackType.height >= painting.height + PADDING * 2,
+    (r) => r.rackType.height >= painting.height + MARGIN * 2,
   );
   if (sizeCompatible.length === 0) {
     const maxAvailHeight = Math.max(...widthCompatible.map((r) => r.rackType.height));

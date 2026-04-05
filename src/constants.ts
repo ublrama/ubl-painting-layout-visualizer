@@ -1,5 +1,5 @@
-// Padding around each painting (all four sides) in centimetres
-export const PADDING = 5;
+// Minimum gap between paintings and between a painting and a rack wall (cm)
+export const MARGIN = 2;
 
 // Default render scale: pixels per centimetre
 export const SCALE = 2;

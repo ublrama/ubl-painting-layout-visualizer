@@ -1,145 +1,218 @@
 /**
- * Shared placement algorithm used by both API routes and frontend.
- * Duplicated here since API routes can't import from src/ in Vercel's build.
+ * Maximal Rectangles bin-packing algorithm — API copy.
  *
- * MAINTENANCE: Keep this file in sync with src/utils/assignPaintingsToRacks.ts.
- * Any changes to the placement logic must be applied to both files.
+ * MAINTENANCE: Keep in sync with src/utils/assignPaintingsToRacks.ts.
+ * Duplicated here because Vercel serverless functions cannot import from src/.
+ *
+ * See the frontend file for full algorithm documentation.
  */
 
 import type { Painting, Rack, PlacedPainting, AssignmentResult } from '../../src/types';
 
-export const PADDING = 5;
+export const MARGIN = 2; // cm
 
-interface ShelfState {
-  currentX: number;
-  currentY: number;
-  shelfHeight: number;
+// ── Types ──────────────────────────────────────────────────────────────────────
+
+interface FreeRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface PackState {
+  freeRects: FreeRect[];
   paintings: PlacedPainting[];
 }
 
-/**
- * Try to place a painting onto the given shelf state within the given rack dimensions.
- * Mutates shelfState on success; returns true if placed, false otherwise.
- */
-export function tryPlace(
-  painting: Painting,
-  shelfState: ShelfState,
-  rackWidth: number,
-  rackHeight: number,
-): boolean {
-  // Try current shelf first
-  if (
-    shelfState.currentX + painting.width + PADDING <= rackWidth &&
-    shelfState.currentY + painting.height + PADDING <= rackHeight
-  ) {
-    shelfState.paintings.push({ ...painting, x: shelfState.currentX, y: shelfState.currentY });
-    shelfState.currentX += painting.width + PADDING;
-    if (painting.height + PADDING > shelfState.shelfHeight) {
-      shelfState.shelfHeight = painting.height + PADDING;
-    }
-    return true;
-  }
+// ── Core functions ─────────────────────────────────────────────────────────────
 
-  // Try a new shelf
-  const nextShelfY = shelfState.currentY + shelfState.shelfHeight;
-  if (
-    nextShelfY + painting.height + PADDING <= rackHeight &&
-    PADDING + painting.width + PADDING <= rackWidth
-  ) {
-    shelfState.currentX = PADDING;
-    shelfState.currentY = nextShelfY;
-    shelfState.shelfHeight = painting.height + PADDING;
-    shelfState.paintings.push({ ...painting, x: shelfState.currentX, y: shelfState.currentY });
-    shelfState.currentX += painting.width + PADDING;
-    return true;
-  }
-
-  return false;
-}
-
-/**
- * Build a ShelfState from an existing list of already-placed paintings,
- * so we can continue packing on that side.
- */
-export function buildShelfState(placed: PlacedPainting[]): ShelfState {
-  if (placed.length === 0) {
-    return { currentX: PADDING, currentY: PADDING, shelfHeight: 0, paintings: placed };
-  }
-
-  const maxY = Math.max(...placed.map((p) => p.y));
-  const paintingsOnLastShelf = placed.filter((p) => p.y === maxY);
-  const rightmost = paintingsOnLastShelf.reduce(
-    (best, p) => (p.x + p.width > best ? p.x + p.width : best),
-    0,
-  );
-  const shelfHeight = Math.max(...paintingsOnLastShelf.map((p) => p.height + PADDING));
-
+export function createPackState(rackWidth: number, rackHeight: number): PackState {
   return {
-    currentX: rightmost + PADDING,
-    currentY: maxY,
-    shelfHeight,
-    paintings: placed,
+    freeRects: [{ x: MARGIN, y: MARGIN, w: rackWidth - MARGIN, h: rackHeight - MARGIN }],
+    paintings: [],
   };
 }
 
+export function buildPackState(
+  placed: PlacedPainting[],
+  rackWidth: number,
+  rackHeight: number,
+): PackState {
+  const state = createPackState(rackWidth, rackHeight);
+  state.paintings = [...placed];
+  for (const p of placed) {
+    _subtractRect(state.freeRects, p.x, p.y, p.width + MARGIN, p.height + MARGIN);
+  }
+  return state;
+}
+
+export function tryPlace(painting: Painting, state: PackState): boolean {
+  const pw = painting.width  + MARGIN;
+  const ph = painting.height + MARGIN;
+
+  let bestIdx       = -1;
+  let bestShortSide = Infinity;
+  let bestLongSide  = Infinity;
+
+  for (let i = 0; i < state.freeRects.length; i++) {
+    const r = state.freeRects[i];
+    if (pw <= r.w && ph <= r.h) {
+      const shortSide = Math.min(r.w - pw, r.h - ph);
+      const longSide  = Math.max(r.w - pw, r.h - ph);
+      if (shortSide < bestShortSide || (shortSide === bestShortSide && longSide < bestLongSide)) {
+        bestShortSide = shortSide;
+        bestLongSide  = longSide;
+        bestIdx       = i;
+      }
+    }
+  }
+
+  if (bestIdx === -1) return false;
+
+  const rect = state.freeRects[bestIdx];
+  state.paintings.push({ ...painting, x: rect.x, y: rect.y });
+  _subtractRect(state.freeRects, rect.x, rect.y, pw, ph);
+  return true;
+}
+
+// ── Internal ───────────────────────────────────────────────────────────────────
+
+function _subtractRect(
+  freeRects: FreeRect[],
+  usedX: number,
+  usedY: number,
+  usedW: number,
+  usedH: number,
+): void {
+  const result: FreeRect[] = [];
+
+  for (const r of freeRects) {
+    if (
+      usedX >= r.x + r.w || usedX + usedW <= r.x ||
+      usedY >= r.y + r.h || usedY + usedH <= r.y
+    ) {
+      result.push(r);
+      continue;
+    }
+    if (usedX > r.x)
+      result.push({ x: r.x,           y: r.y,           w: usedX - r.x,                   h: r.h });
+    if (usedX + usedW < r.x + r.w)
+      result.push({ x: usedX + usedW, y: r.y,           w: r.x + r.w - (usedX + usedW),   h: r.h });
+    if (usedY > r.y)
+      result.push({ x: r.x,           y: r.y,           w: r.w, h: usedY - r.y             });
+    if (usedY + usedH < r.y + r.h)
+      result.push({ x: r.x,           y: usedY + usedH, w: r.w, h: r.y + r.h - (usedY + usedH) });
+  }
+
+  const pruned = result.filter((a, i) =>
+    !result.some(
+      (b, j) => i !== j && b.x <= a.x && b.y <= a.y && b.x + b.w >= a.x + a.w && b.y + b.h >= a.y + a.h,
+    ),
+  );
+
+  freeRects.length = 0;
+  for (const r of pruned) freeRects.push(r);
+}
+
+// ── Cross-rack placement helper ───────────────────────────────────────────────
+
+function _findBestRack(
+  painting: Painting,
+  racks: Rack[],
+  states: Map<string, PackState>,
+): Rack | null {
+  const pw = painting.width  + MARGIN;
+  const ph = painting.height + MARGIN;
+
+  let bestRack:  Rack | null = null;
+  let bestDepth  = Infinity;
+  let bestShort  = Infinity;
+  let bestLong   = Infinity;
+
+  for (const rack of racks) {
+    const depth = rack.rackType.maxDepth;
+    if (depth > bestDepth) continue;
+
+    for (const r of states.get(rack.name)!.freeRects) {
+      if (pw <= r.w && ph <= r.h) {
+        const shortSide = Math.min(r.w - pw, r.h - ph);
+        const longSide  = Math.max(r.w - pw, r.h - ph);
+        if (
+          depth < bestDepth ||
+          (depth === bestDepth &&
+            (shortSide < bestShort || (shortSide === bestShort && longSide < bestLong)))
+        ) {
+          bestDepth = depth;
+          bestShort = shortSide;
+          bestLong  = longSide;
+          bestRack  = rack;
+        }
+      }
+    }
+  }
+
+  return bestRack;
+}
+
+// ── Priority racks ─────────────────────────────────────────────────────────────
+
 const PRIORITY_RACKS = new Set<string>([
-  'Pos. 2-11a',
-  'Pos. 4-12a',
-  'Pos. 4-11b',
-  'Pos. 1-12a',
-  'Pos. 1-12b',
-  'Pos. 1-13a',
-  'Pos. 1-13b',
-  'Pos. 1-14a',
-  'Pos. 1-14b',
-  'Pos. 1-15a',
-  'Pos. 1-15b',
-  'Pos. 1-16a',
-  'Pos. 1-16b',
-  'Pos. 1-17a',
-  'Pos. 1-17b',
-  'Pos. 1-18a',
-  'Pos. 1-18b',
-  'Pos. 1-19a',
-  'Pos. 1-19b',
-  'Pos. 1-20a',
-  'Pos. 1-20b',
-  'Pos. 1-21a',
-  'Pos. 1-21b',
+  'Pos. 2-11a', 'Pos. 4-12a', 'Pos. 4-11b',
+  'Pos. 1-12a', 'Pos. 1-12b', 'Pos. 1-13a', 'Pos. 1-13b',
+  'Pos. 1-14a', 'Pos. 1-14b', 'Pos. 1-15a', 'Pos. 1-15b',
+  'Pos. 1-16a', 'Pos. 1-16b', 'Pos. 1-17a', 'Pos. 1-17b',
+  'Pos. 1-18a', 'Pos. 1-18b', 'Pos. 1-19a', 'Pos. 1-19b',
+  'Pos. 1-20a', 'Pos. 1-20b', 'Pos. 1-21a', 'Pos. 1-21b',
   'Pos. 3-22a',
 ]);
 
 const isPriorityRack = (name: string) => PRIORITY_RACKS.has(name);
 
-export function assignPaintingsToRacks(paintings: Painting[], racks: Rack[]): AssignmentResult {
-  const workRacks: Rack[] = racks.map((r) => ({
-    ...r,
-    paintings: [],
-  }));
+// ── Main export ────────────────────────────────────────────────────────────────
 
-  const sorted = [...paintings].sort((a, b) => a.depth - b.depth);
+export function assignPaintingsToRacks(paintings: Painting[], racks: Rack[]): AssignmentResult {
+  const workRacks: Rack[] = racks.map((r) => ({ ...r, paintings: [] }));
+  const rackByName = new Map<string, Rack>(workRacks.map((r) => [r.name, r]));
+
+  const rackStates = new Map<string, PackState>(
+    workRacks.map((r) => [r.name, createPackState(r.rackType.width, r.rackType.height)]),
+  );
+
   const unassigned: Painting[] = [];
 
+  const predefined = paintings.filter((p) => p.predefinedRack !== null);
+  const free       = paintings.filter((p) => p.predefinedRack === null);
+
+  for (const painting of predefined) {
+    const rack = rackByName.get(painting.predefinedRack!);
+    if (!rack) { unassigned.push(painting); continue; }
+    const state = rackStates.get(rack.name)!;
+    if (tryPlace(painting, state)) {
+      rack.paintings = state.paintings;
+    } else {
+      unassigned.push(painting);
+    }
+  }
+
+  const sorted = [...free].sort((a, b) => b.width * b.height - a.width * a.height);
+
   for (const painting of sorted) {
-    const byDepth = (a: Rack, b: Rack) => a.rackType.maxDepth - b.rackType.maxDepth;
     const canFit  = (r: Rack) => r.rackType.maxDepth >= painting.depth;
+    const byDepth = (a: Rack, b: Rack) => a.rackType.maxDepth - b.rackType.maxDepth;
 
     const priorityEligible  = workRacks.filter((r) =>  isPriorityRack(r.name) && canFit(r)).sort(byDepth);
     const remainingEligible = workRacks.filter((r) => !isPriorityRack(r.name) && canFit(r)).sort(byDepth);
-    const eligible = [...priorityEligible, ...remainingEligible];
 
-    let placed = false;
-    for (const rack of eligible) {
-      const { width: rw, height: rh } = rack.rackType;
-      const state = buildShelfState(rack.paintings);
-      if (tryPlace(painting, state, rw, rh)) {
-        rack.paintings = state.paintings;
-        placed = true;
-        break;
-      }
-    }
+    const targetRack =
+      _findBestRack(painting, priorityEligible,  rackStates) ??
+      _findBestRack(painting, remainingEligible, rackStates);
 
-    if (!placed) {
+    if (targetRack) {
+      const state = rackStates.get(targetRack.name)!;
+      tryPlace(painting, state);
+      targetRack.paintings = state.paintings;
+    } else {
       unassigned.push(painting);
     }
   }

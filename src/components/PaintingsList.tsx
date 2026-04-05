@@ -253,10 +253,7 @@ export function PaintingsList({ assignmentResult, onSelectRack, onAddPainting, o
                       {!isUnassigned && onUnassignPainting && (
                         <button
                           type="button"
-                          onClick={() => {
-                            if (confirm(`"${p.signatuur}" verwijderen van rek ${p.assignedRackName}?`))
-                              onUnassignPainting(p.id);
-                          }}
+                          onClick={() => onUnassignPainting(p.id)}
                           className="text-xs text-orange-600 hover:text-orange-800 font-medium px-1.5 py-0.5 rounded hover:bg-orange-50"
                           title="Verwijder van rek"
                         >
@@ -266,10 +263,7 @@ export function PaintingsList({ assignmentResult, onSelectRack, onAddPainting, o
                       {onDeletePainting && (
                         <button
                           type="button"
-                          onClick={() => {
-                            if (confirm(`Schilderij "${p.signatuur}" definitief verwijderen?`))
-                              onDeletePainting(p.id);
-                          }}
+                          onClick={() => onDeletePainting(p.id)}
                           className="text-xs text-red-500 hover:text-red-700 font-medium px-1.5 py-0.5 rounded hover:bg-red-50"
                           title="Schilderij verwijderen"
                         >

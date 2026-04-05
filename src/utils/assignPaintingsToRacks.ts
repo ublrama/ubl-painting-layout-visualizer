@@ -1,180 +1,276 @@
-import { PADDING } from '../constants';
+/**
+ * Maximal Rectangles bin-packing algorithm for painting placement.
+ *
+ * MARGIN = 2 cm — minimum gap between any two paintings, and between a painting
+ * and a rack wall.
+ *
+ * How it works:
+ *   • The rack starts as a single free rectangle.
+ *   • When a painting is placed its "footprint" is (width + MARGIN) × (height + MARGIN):
+ *     the trailing MARGIN guarantees ≥ 2 cm to the next painting on the right / below.
+ *   • The initial free rect is offset by MARGIN from the left and top walls, so the
+ *     leading margin is already provided.
+ *   • After each placement, overlapping free rects are split into up to 4 axis-aligned
+ *     pieces and any that are fully contained in another are pruned → "maximal" free rects.
+ *   • Best Short Side Fit (BSSF) heuristic picks the tightest-fitting free rect.
+ *   • Bulk assignment sorts paintings by area (largest first) for better density.
+ *
+ * MAINTENANCE: keep in sync with api/_lib/placement.ts (same algorithm, duplicated
+ * because Vercel serverless functions cannot import from src/).
+ */
+
 import type { Painting, Rack, PlacedPainting, AssignmentResult } from '../types';
 
-interface ShelfState {
-  currentX: number;
-  currentY: number;
-  shelfHeight: number;
+export const MARGIN = 2; // cm
+
+// ── Types ──────────────────────────────────────────────────────────────────────
+
+interface FreeRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface PackState {
+  freeRects: FreeRect[];
   paintings: PlacedPainting[];
 }
 
-/**
- * Try to place a painting onto the given shelf state within the given rack dimensions.
- * Mutates shelfState on success; returns true if placed, false otherwise.
- */
-function tryPlace(
-  painting: Painting,
-  shelfState: ShelfState,
-  rackWidth: number,
-  rackHeight: number,
-): boolean {
-  // Try current shelf first — must fit both horizontally and vertically within the rack
-  if (
-    shelfState.currentX + painting.width + PADDING <= rackWidth &&
-    shelfState.currentY + painting.height + PADDING <= rackHeight
-  ) {
-    shelfState.paintings.push({ ...painting, x: shelfState.currentX, y: shelfState.currentY });
-    shelfState.currentX += painting.width + PADDING;
-    if (painting.height + PADDING > shelfState.shelfHeight) {
-      shelfState.shelfHeight = painting.height + PADDING;
-    }
-    return true;
-  }
-
-  // Try a new shelf
-  const nextShelfY = shelfState.currentY + shelfState.shelfHeight;
-  if (
-    nextShelfY + painting.height + PADDING <= rackHeight &&
-    PADDING + painting.width + PADDING <= rackWidth
-  ) {
-    shelfState.currentX = PADDING;
-    shelfState.currentY = nextShelfY;
-    shelfState.shelfHeight = painting.height + PADDING;
-    shelfState.paintings.push({ ...painting, x: shelfState.currentX, y: shelfState.currentY });
-    shelfState.currentX += painting.width + PADDING;
-    return true;
-  }
-
-  return false;
-}
+// ── Core functions ─────────────────────────────────────────────────────────────
 
 /**
- * Build a ShelfState from an existing list of already-placed paintings,
- * so we can continue packing on that side.
+ * Create a fresh pack state for an empty rack.
+ * Initial free rect covers the whole rack inset by MARGIN on left and top;
+ * right/bottom boundary is at the rack edge (trailing margin is in the footprint).
  */
-function buildShelfState(placed: PlacedPainting[]): ShelfState {
-  if (placed.length === 0) {
-    return { currentX: PADDING, currentY: PADDING, shelfHeight: 0, paintings: placed };
-  }
-
-  // Reconstruct the shelf state from the existing placements
-  // Find the bottom-most y and then the rightmost x on that shelf
-  const maxY = Math.max(...placed.map((p) => p.y));
-  const paintingsOnLastShelf = placed.filter((p) => p.y === maxY);
-  const rightmost = paintingsOnLastShelf.reduce(
-    (best, p) => (p.x + p.width > best ? p.x + p.width : best),
-    0,
-  );
-  const shelfHeight = Math.max(...paintingsOnLastShelf.map((p) => p.height + PADDING));
-
+export function createPackState(rackWidth: number, rackHeight: number): PackState {
   return {
-    currentX: rightmost + PADDING,
-    currentY: maxY,
-    shelfHeight,
-    paintings: placed,
+    freeRects: [{ x: MARGIN, y: MARGIN, w: rackWidth - MARGIN, h: rackHeight - MARGIN }],
+    paintings: [],
   };
 }
 
 /**
- * Explicit list of priority racks.
- * These are filled first (best-fit depth within the group).
- * All other racks are only used once these are full.
+ * Reconstruct a PackState from already-placed paintings.
+ * Works even when paintings were placed by an older algorithm — any gap ≥ MARGIN
+ * is exposed as a usable free rectangle.
  */
+export function buildPackState(
+  placed: PlacedPainting[],
+  rackWidth: number,
+  rackHeight: number,
+): PackState {
+  const state = createPackState(rackWidth, rackHeight);
+  state.paintings = [...placed];
+  for (const p of placed) {
+    _subtractRect(state.freeRects, p.x, p.y, p.width + MARGIN, p.height + MARGIN);
+  }
+  return state;
+}
+
+/**
+ * Try to place one painting into a PackState (Best Short Side Fit).
+ * Mutates state and returns true on success; returns false without any mutation on failure.
+ */
+export function tryPlace(painting: Painting, state: PackState): boolean {
+  const pw = painting.width  + MARGIN;
+  const ph = painting.height + MARGIN;
+
+  let bestIdx       = -1;
+  let bestShortSide = Infinity;
+  let bestLongSide  = Infinity;
+
+  for (let i = 0; i < state.freeRects.length; i++) {
+    const r = state.freeRects[i];
+    if (pw <= r.w && ph <= r.h) {
+      const shortSide = Math.min(r.w - pw, r.h - ph);
+      const longSide  = Math.max(r.w - pw, r.h - ph);
+      if (shortSide < bestShortSide || (shortSide === bestShortSide && longSide < bestLongSide)) {
+        bestShortSide = shortSide;
+        bestLongSide  = longSide;
+        bestIdx       = i;
+      }
+    }
+  }
+
+  if (bestIdx === -1) return false;
+
+  const rect = state.freeRects[bestIdx];
+  state.paintings.push({ ...painting, x: rect.x, y: rect.y });
+  _subtractRect(state.freeRects, rect.x, rect.y, pw, ph);
+  return true;
+}
+
+// ── Internal ───────────────────────────────────────────────────────────────────
+
+function _subtractRect(
+  freeRects: FreeRect[],
+  usedX: number,
+  usedY: number,
+  usedW: number,
+  usedH: number,
+): void {
+  const result: FreeRect[] = [];
+
+  for (const r of freeRects) {
+    // No overlap — keep unchanged
+    if (
+      usedX >= r.x + r.w || usedX + usedW <= r.x ||
+      usedY >= r.y + r.h || usedY + usedH <= r.y
+    ) {
+      result.push(r);
+      continue;
+    }
+    // Overlaps — split into up to 4 axis-aligned pieces
+    if (usedX > r.x)
+      result.push({ x: r.x,           y: r.y,           w: usedX - r.x,                   h: r.h });
+    if (usedX + usedW < r.x + r.w)
+      result.push({ x: usedX + usedW, y: r.y,           w: r.x + r.w - (usedX + usedW),   h: r.h });
+    if (usedY > r.y)
+      result.push({ x: r.x,           y: r.y,           w: r.w, h: usedY - r.y             });
+    if (usedY + usedH < r.y + r.h)
+      result.push({ x: r.x,           y: usedY + usedH, w: r.w, h: r.y + r.h - (usedY + usedH) });
+  }
+
+  // Prune rects fully contained in another (dominated)
+  const pruned = result.filter((a, i) =>
+    !result.some(
+      (b, j) => i !== j && b.x <= a.x && b.y <= a.y && b.x + b.w >= a.x + a.w && b.y + b.h >= a.y + a.h,
+    ),
+  );
+
+  freeRects.length = 0;
+  for (const r of pruned) freeRects.push(r);
+}
+
+// ── Cross-rack placement helper ───────────────────────────────────────────────
+
+/**
+ * Find the rack (from a depth-sorted list) that gives the globally best BSSF
+ * placement for `painting`.
+ *
+ * Primary sort key  : rack maxDepth ascending  (best-fit depth — avoids wasting
+ *                     deep racks on shallow paintings).
+ * Secondary sort key: BSSF shortSide ascending (tightest spatial fit).
+ *
+ * This ensures paintings are consolidated into the racks that already contain
+ * similar-sized neighbours rather than spilling onto the first rack that
+ * happens to have any free space.
+ */
+function _findBestRack(
+  painting: Painting,
+  racks: Rack[],
+  states: Map<string, PackState>,
+): Rack | null {
+  const pw = painting.width  + MARGIN;
+  const ph = painting.height + MARGIN;
+
+  let bestRack:  Rack | null = null;
+  let bestDepth  = Infinity;
+  let bestShort  = Infinity;
+  let bestLong   = Infinity;
+
+  for (const rack of racks) {
+    const depth = rack.rackType.maxDepth;
+    // A deeper rack can only win if no shallower rack has been found yet
+    if (depth > bestDepth) continue;
+
+    for (const r of states.get(rack.name)!.freeRects) {
+      if (pw <= r.w && ph <= r.h) {
+        const shortSide = Math.min(r.w - pw, r.h - ph);
+        const longSide  = Math.max(r.w - pw, r.h - ph);
+        if (
+          depth < bestDepth ||
+          (depth === bestDepth &&
+            (shortSide < bestShort || (shortSide === bestShort && longSide < bestLong)))
+        ) {
+          bestDepth = depth;
+          bestShort = shortSide;
+          bestLong  = longSide;
+          bestRack  = rack;
+        }
+      }
+    }
+  }
+
+  return bestRack;
+}
+
+// ── Priority racks ─────────────────────────────────────────────────────────────
+
 const PRIORITY_RACKS = new Set<string>([
-  'Pos. 2-11a',
-  'Pos. 4-12a',
-  'Pos. 4-11b',
-  'Pos. 1-12a',
-  'Pos. 1-12b',
-  'Pos. 1-13a',
-  'Pos. 1-13b',
-  'Pos. 1-14a',
-  'Pos. 1-14b',
-  'Pos. 1-15a',
-  'Pos. 1-15b',
-  'Pos. 1-16a',
-  'Pos. 1-16b',
-  'Pos. 1-17a',
-  'Pos. 1-17b',
-  'Pos. 1-18a',
-  'Pos. 1-18b',
-  'Pos. 1-19a',
-  'Pos. 1-19b',
-  'Pos. 1-20a',
-  'Pos. 1-20b',
-  'Pos. 1-21a',
-  'Pos. 1-21b',
+  'Pos. 2-11a', 'Pos. 4-12a', 'Pos. 4-11b',
+  'Pos. 1-12a', 'Pos. 1-12b', 'Pos. 1-13a', 'Pos. 1-13b',
+  'Pos. 1-14a', 'Pos. 1-14b', 'Pos. 1-15a', 'Pos. 1-15b',
+  'Pos. 1-16a', 'Pos. 1-16b', 'Pos. 1-17a', 'Pos. 1-17b',
+  'Pos. 1-18a', 'Pos. 1-18b', 'Pos. 1-19a', 'Pos. 1-19b',
+  'Pos. 1-20a', 'Pos. 1-20b', 'Pos. 1-21a', 'Pos. 1-21b',
   'Pos. 3-22a',
 ]);
 
 const isPriorityRack = (name: string) => PRIORITY_RACKS.has(name);
 
+// ── Main export ────────────────────────────────────────────────────────────────
+
 /**
- * Assign paintings to racks using a two-phase strategy:
+ * Assign paintings to racks using a two-phase Maximal Rectangles strategy.
  *
- * Phase 1 – Predefined racks (CSV "Rek" column):
- *   Paintings that carry a predefinedRack name are placed directly onto that
- *   rack first, regardless of depth/priority ordering.  If the rack doesn't
- *   exist or the painting physically doesn't fit, it falls through to unassigned.
+ * Phase 1 – Predefined racks: paintings with a predefinedRack are placed
+ *   directly on that rack first, regardless of depth/priority.
  *
- * Phase 2 – Normal best-fit:
- *   Remaining paintings are sorted by depth ascending and distributed using
- *   the priority-first / best-fit-depth shelf algorithm.
+ * Phase 2 – Best-fit: remaining paintings are sorted by area (largest first)
+ *   and placed using BSSF into priority racks first, then remaining racks,
+ *   both ordered by depth ascending (best-fit depth).
  */
 export function assignPaintingsToRacks(paintings: Painting[], racks: Rack[]): AssignmentResult {
-  // Deep-copy racks so we don't mutate the originals
-  const workRacks: Rack[] = racks.map((r) => ({
-    ...r,
-    paintings: [],
-  }));
-
+  const workRacks: Rack[] = racks.map((r) => ({ ...r, paintings: [] }));
   const rackByName = new Map<string, Rack>(workRacks.map((r) => [r.name, r]));
+
+  // Maintain one PackState per rack so free rects are always current
+  const rackStates = new Map<string, PackState>(
+    workRacks.map((r) => [r.name, createPackState(r.rackType.width, r.rackType.height)]),
+  );
 
   const unassigned: Painting[] = [];
 
-  // ── Phase 1: paintings with a predefined rack ──────────────────────────────
+  // ── Phase 1: predefined ─────────────────────────────────────────────────────
   const predefined = paintings.filter((p) => p.predefinedRack !== null);
   const free       = paintings.filter((p) => p.predefinedRack === null);
 
   for (const painting of predefined) {
-    const targetRack = rackByName.get(painting.predefinedRack!);
-    if (!targetRack) {
-      unassigned.push(painting);
-      continue;
-    }
-    const { width: rw, height: rh } = targetRack.rackType;
-    const state = buildShelfState(targetRack.paintings);
-    if (tryPlace(painting, state, rw, rh)) {
-      targetRack.paintings = state.paintings;
+    const rack = rackByName.get(painting.predefinedRack!);
+    if (!rack) { unassigned.push(painting); continue; }
+    const state = rackStates.get(rack.name)!;
+    if (tryPlace(painting, state)) {
+      rack.paintings = state.paintings;
     } else {
       unassigned.push(painting);
     }
   }
 
-  // ── Phase 2: remaining paintings – priority-first, best-fit depth ──────────
-  const sorted = [...free].sort((a, b) => a.depth - b.depth);
+  // ── Phase 2: free paintings, area-descending ─────────────────────────────────
+  const sorted = [...free].sort((a, b) => b.width * b.height - a.width * a.height);
 
   for (const painting of sorted) {
-    const byDepth = (a: Rack, b: Rack) => a.rackType.maxDepth - b.rackType.maxDepth;
     const canFit  = (r: Rack) => r.rackType.maxDepth >= painting.depth;
+    const byDepth = (a: Rack, b: Rack) => a.rackType.maxDepth - b.rackType.maxDepth;
 
     const priorityEligible  = workRacks.filter((r) =>  isPriorityRack(r.name) && canFit(r)).sort(byDepth);
     const remainingEligible = workRacks.filter((r) => !isPriorityRack(r.name) && canFit(r)).sort(byDepth);
-    const eligible = [...priorityEligible, ...remainingEligible];
 
-    let placed = false;
-    for (const rack of eligible) {
-      const { width: rw, height: rh } = rack.rackType;
+    // Global BSSF: pick the single best-fitting free rect across all eligible racks.
+    // Priority racks are preferred — only fall through to non-priority if no priority
+    // rack has any space at all.
+    const targetRack =
+      _findBestRack(painting, priorityEligible,  rackStates) ??
+      _findBestRack(painting, remainingEligible, rackStates);
 
-      const state = buildShelfState(rack.paintings);
-      if (tryPlace(painting, state, rw, rh)) {
-        rack.paintings = state.paintings;
-        placed = true;
-        break;
-      }
-    }
-
-    if (!placed) {
+    if (targetRack) {
+      const state = rackStates.get(targetRack.name)!;
+      tryPlace(painting, state);
+      targetRack.paintings = state.paintings;
+    } else {
       unassigned.push(painting);
     }
   }

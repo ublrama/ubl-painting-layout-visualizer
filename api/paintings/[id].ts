@@ -29,7 +29,7 @@ export default async function handler(req: Request): Promise<Response> {
 
   // ── GET ──────────────────────────────────────────────────────────────────
   if (req.method === 'GET') {
-    const paintings = await getPaintings();
+    const { paintings } = await getPaintings();
     const painting  = paintings.find((p) => p.id === id);
     if (!painting) {
       return Response.json({ error: 'Not found' }, { status: 404, headers: CORS_HEADERS });
@@ -49,7 +49,7 @@ export default async function handler(req: Request): Promise<Response> {
       return Response.json({ error: 'Invalid JSON' }, { status: 400, headers: CORS_HEADERS });
     }
 
-    const paintings = await getPaintings();
+    const { paintings } = await getPaintings();
     const idx       = paintings.findIndex((p) => p.id === id);
     if (idx === -1) {
       return Response.json({ error: 'Not found' }, { status: 404, headers: CORS_HEADERS });
@@ -79,8 +79,8 @@ export default async function handler(req: Request): Promise<Response> {
       if (updatedPainting.assignedRackName) {
         const newRack = assignment.racks.find((r) => r.name === updatedPainting.assignedRackName);
         if (newRack) {
-          const state = buildShelfState(newRack.paintings as PlacedPainting[]);
-          tryPlace(updatedPainting, state, newRack.rackType.width, newRack.rackType.height);
+          const state = buildPackState(newRack.paintings as PlacedPainting[], newRack.rackType.width, newRack.rackType.height);
+          tryPlace(updatedPainting, state);
           newRack.paintings = state.paintings;
         } else {
           // rack not in assignment — add to unassigned
@@ -104,7 +104,7 @@ export default async function handler(req: Request): Promise<Response> {
     const auth = await verifyClerkToken(req);
     if (!auth) return unauthorized();
 
-    const paintings = await getPaintings();
+    const { paintings } = await getPaintings();
     const painting  = paintings.find((p) => p.id === id);
     if (!painting) {
       return Response.json({ error: 'Not found' }, { status: 404, headers: CORS_HEADERS });
