@@ -5,7 +5,7 @@
  */
 
 import type { Painting, PlacedPainting } from '../../src/types';
-import { getPaintings, upsertPainting, deletePainting, getAssignment, setAssignment } from '../_lib/store.js';
+import { getPaintings, upsertPainting, deletePainting, getAssignment, setAssignment, updatePaintingPosition } from '../_lib/store.js';
 import { buildPackState, tryPlace, assignPaintingsToRacks } from '../_lib/placement.js';
 import { verifyClerkToken, unauthorized } from '../_lib/auth.js';
 
@@ -42,11 +42,19 @@ export default async function handler(req: Request): Promise<Response> {
     const auth = await verifyClerkToken(req);
     if (!auth) return unauthorized();
 
-    let body: Partial<Painting>;
+    let body: Partial<Painting> & { x?: number; y?: number };
     try {
       body = await req.json();
     } catch {
       return Response.json({ error: 'Invalid JSON' }, { status: 400, headers: CORS_HEADERS });
+    }
+
+    // ── Position-only update (drag-and-drop repositioning) ─────────────
+    // When only x and y are provided (no Painting fields), just update the
+    // placed_paintings row without touching painting metadata or placement.
+    if (body.x !== undefined && body.y !== undefined && Object.keys(body).length === 2) {
+      await updatePaintingPosition(id, body.x, body.y);
+      return Response.json({ ok: true }, { headers: CORS_HEADERS });
     }
 
     const { paintings } = await getPaintings();

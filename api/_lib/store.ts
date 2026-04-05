@@ -168,6 +168,20 @@ export async function deletePainting(id: string): Promise<void> {
   if (error) throw error;
 }
 
+/**
+ * Update only the x/y position of a painting in the placed_paintings table.
+ * Does NOT touch placement logic — caller is responsible for validating the
+ * new position before calling this.
+ */
+export async function updatePaintingPosition(id: string, x: number, y: number): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from('placed_paintings')
+    .update({ x, y })
+    .eq('id', id);
+  if (error) throw error;
+}
+
 // ── Racks ────────────────────────────────────────────────────────────────────
 
 export async function getRacks(): Promise<Rack[]> {

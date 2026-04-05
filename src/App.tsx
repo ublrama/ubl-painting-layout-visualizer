@@ -245,6 +245,32 @@ export default function App() {
     });
   }
 
+  async function handlePaintingMove(paintingId: string, newX: number, newY: number) {
+    // Try API first (position-only PUT: only x and y in body)
+    try {
+      const res = await authFetch(`/api/paintings/${paintingId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ x: newX, y: newY }),
+      });
+      if (res.ok) { await mutate(); return; }
+    } catch { /* fall through to local */ }
+
+    // Local fallback: update x/y in place
+    setLocalAssignment((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        racks: prev.racks.map((rack) => ({
+          ...rack,
+          paintings: rack.paintings.map((p) =>
+            p.id === paintingId ? { ...p, x: newX, y: newY } : p,
+          ),
+        })),
+      };
+    });
+  }
+
   // ── Switch tabs ──────────────────────────────────────────────────────────
 
   function handleSwitchToPaintingsTab() {
@@ -334,6 +360,7 @@ export default function App() {
                 onAddPaintingToRack={() =>
                   setShowAddPaintingForRack(assignmentResult.racks[currentRackIndex].name)
                 }
+                onPaintingMove={handlePaintingMove}
               />
             )
           )}

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { Rack } from '../types';
 import { RackCanvas } from './RackCanvas';
 import { COLLECTION_COLORS } from '../constants';
@@ -12,6 +13,7 @@ interface RackDetailProps {
   onNext: () => void;
   onUnassignPainting?: (paintingId: string) => Promise<void>;
   onAddPaintingToRack?: () => void;
+  onPaintingMove?: (paintingId: string, newX: number, newY: number) => Promise<void>;
 }
 
 export function RackDetail({
@@ -24,8 +26,10 @@ export function RackDetail({
   onNext,
   onUnassignPainting,
   onAddPaintingToRack,
+  onPaintingMove,
 }: RackDetailProps) {
   const { rackType } = rack;
+  const [editMode, setEditMode] = useState(false);
 
   return (
     <div className="flex flex-col gap-6">
@@ -45,6 +49,18 @@ export function RackDetail({
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
             >
               + Schilderij toevoegen
+            </button>
+          )}
+          {onPaintingMove && (
+            <button
+              onClick={() => setEditMode((v) => !v)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 text-sm font-medium transition-colors ${
+                editMode
+                  ? 'bg-amber-50 border-amber-400 text-amber-700 hover:bg-amber-100'
+                  : 'bg-white border-gray-300 text-gray-700 hover:border-blue-500'
+              }`}
+            >
+              {editMode ? '✏️ Bewerken aan' : '✏️ Bewerken'}
             </button>
           )}
           <button
@@ -74,7 +90,7 @@ export function RackDetail({
               {rack.paintings.length} schilderijen
             </span>
           </div>
-          <RackCanvas rack={rack} scale={zoom} />
+          <RackCanvas rack={rack} scale={zoom} editMode={editMode} onPaintingMove={onPaintingMove} />
         </div>
 
         {/* Print-only legend table */}
