@@ -6,7 +6,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { Painting, PlacedPainting } from '../src/types';
 import { getPaintings, upsertPainting, getAssignment, setAssignment } from './_lib/store.js';
-import { buildShelfState, tryPlace } from './_lib/placement.js';
+import { buildPackState, tryPlace } from './_lib/placement.js';
 import { verifyClerkToken, unauthorized } from './_lib/auth.js';
 
 const CORS_HEADERS = {
@@ -107,8 +107,8 @@ export default async function handler(req: Request): Promise<Response> {
         if (assignment) {
           const rack = assignment.racks.find((r) => r.name === newPainting.assignedRackName);
           if (rack) {
-            const state = buildShelfState(rack.paintings as PlacedPainting[]);
-            tryPlace(newPainting, state, rack.rackType.width, rack.rackType.height);
+            const state = buildPackState(rack.paintings as PlacedPainting[], rack.rackType.width, rack.rackType.height);
+            tryPlace(newPainting, state);
             rack.paintings = state.paintings;
             await setAssignment(assignment);
           }
