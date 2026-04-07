@@ -3,7 +3,7 @@ import { useAuthFetch } from '../hooks/useAuthFetch';
 import type { RackType } from '../types';
 import { AddRackTypeModal } from './AddRackTypeModal';
 
-type Tab = 'seed-default' | 'seed-custom' | 'rack-types' | 'clear';
+type Tab = 'seed-default' | 'seed-custom' | 'rack-types' | 'clear' | 'export';
 type PanelState = 'idle' | 'loading' | 'success' | 'error';
 
 interface DatabasePanelProps {
@@ -20,6 +20,9 @@ export function DatabasePanel({ onClose, onSeedComplete }: DatabasePanelProps) {
   const [paintingsFile, setPaintingsFile] = useState<File | null>(null);
   const [rackTypesFile, setRackTypesFile] = useState<File | null>(null);
   const [racksFile, setRacksFile] = useState<File | null>(null);
+
+  const [exportLoading, setExportLoading] = useState(false);
+  const [exportError, setExportError] = useState('');
 
   // Rack types state
   const [rackTypes, setRackTypes] = useState<RackType[]>([]);
@@ -147,6 +150,38 @@ export function DatabasePanel({ onClose, onSeedComplete }: DatabasePanelProps) {
       return;
     }
     await fetchRackTypes();
+  }
+
+  function downloadCsv(filename: string, csvContent: string) {
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleExport() {
+    setExportLoading(true);
+    setExportError('');
+    try {
+      const res = await authFetch('/api/export');
+      if (!res.ok) {
+        const d = await safeJson(res);
+        setExportError((d.error as string) ?? 'Export mislukt');
+        return;
+      }
+      const data = await res.json() as { paintings: string; racks: string; rackTypes: string };
+      const now = new Date().toISOString().slice(0, 10);
+      downloadCsv(`schilderijen-export-${now}.csv`, data.paintings);
+      downloadCsv(`rekken-export-${now}.csv`, data.racks);
+      downloadCsv(`rektypen-export-${now}.csv`, data.rackTypes);
+    } catch (e) {
+      setExportError(String(e));
+    } finally {
+      setExportLoading(false);
+    }
   }
 
   const tabs: { key: Tab; label: string }[] = [
