@@ -271,6 +271,27 @@ export default function App() {
     });
   }
 
+  // ── Reorganise rack ──────────────────────────────────────────────────────
+
+  async function handleReorganiseRack(): Promise<void> {
+    if (!assignmentResult) return;
+    const rack = assignmentResult.racks[currentRackIndex];
+    if (!rack) return;
+
+    const res = await authFetch('/api/reorganise-rack', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rackName: rack.name }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error((data.error as string) || 'Fout bij optimaliseren van het rek');
+    }
+
+    await mutate();
+  }
+
   // ── Switch tabs ──────────────────────────────────────────────────────────
 
   function handleSwitchToPaintingsTab() {
@@ -361,6 +382,7 @@ export default function App() {
                   setShowAddPaintingForRack(assignmentResult.racks[currentRackIndex].name)
                 }
                 onPaintingMove={handlePaintingMove}
+                onReorganise={handleReorganiseRack}
               />
             )
           )}

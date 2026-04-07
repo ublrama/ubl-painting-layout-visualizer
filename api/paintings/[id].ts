@@ -5,8 +5,8 @@
  */
 
 import type { Painting, PlacedPainting } from '../../src/types';
-import { getPaintings, upsertPainting, deletePainting, getAssignment, setAssignment, updatePaintingPosition } from '../_lib/store.js';
-import { buildPackState, tryPlace, assignPaintingsToRacks } from '../_lib/placement.js';
+import { getPaintingById, upsertPainting, deletePainting, getAssignment, setAssignment, updatePaintingPosition } from '../_lib/store.js';
+import { buildPackState, tryPlace } from '../_lib/placement.js';
 import { verifyClerkToken, unauthorized } from '../_lib/auth.js';
 
 const CORS_HEADERS = {
@@ -29,8 +29,7 @@ export default async function handler(req: Request): Promise<Response> {
 
   // ── GET ──────────────────────────────────────────────────────────────────
   if (req.method === 'GET') {
-    const { paintings } = await getPaintings();
-    const painting  = paintings.find((p) => p.id === id);
+    const painting = await getPaintingById(id);
     if (!painting) {
       return Response.json({ error: 'Not found' }, { status: 404, headers: CORS_HEADERS });
     }
@@ -57,29 +56,22 @@ export default async function handler(req: Request): Promise<Response> {
       return Response.json({ ok: true }, { headers: CORS_HEADERS });
     }
 
-    const { paintings } = await getPaintings();
-    const idx       = paintings.findIndex((p) => p.id === id);
-    if (idx === -1) {
+    const oldPainting = await getPaintingById(id);
+    if (!oldPainting) {
       return Response.json({ error: 'Not found' }, { status: 404, headers: CORS_HEADERS });
     }
 
-    const oldPainting   = paintings[idx];
     const updatedPainting: Painting = { ...oldPainting, ...body, id };
     await upsertPainting(updatedPainting);
 
     // Update assignment if rack changed
     const assignment = await getAssignment();
     if (assignment && oldPainting.assignedRackName !== updatedPainting.assignedRackName) {
-      // Remove from old rack
+      // Remove from old rack — keep remaining paintings at their current positions (no rebuild)
       if (oldPainting.assignedRackName) {
         const oldRack = assignment.racks.find((r) => r.name === oldPainting.assignedRackName);
         if (oldRack) {
           oldRack.paintings = oldRack.paintings.filter((p) => p.id !== id);
-          // Rebuild placement for old rack
-          const remaining = oldRack.paintings.map((p) => ({ ...p })) as Painting[];
-          oldRack.paintings = [];
-          const rebuilt = assignPaintingsToRacks(remaining, [{ ...oldRack }]);
-          oldRack.paintings = rebuilt.racks[0]?.paintings ?? [];
         }
       }
 
@@ -112,30 +104,18 @@ export default async function handler(req: Request): Promise<Response> {
     const auth = await verifyClerkToken(req);
     if (!auth) return unauthorized();
 
-    const { paintings } = await getPaintings();
-    const painting  = paintings.find((p) => p.id === id);
+    const painting = await getPaintingById(id);
     if (!painting) {
       return Response.json({ error: 'Not found' }, { status: 404, headers: CORS_HEADERS });
     }
 
     await deletePainting(id); // cascade deletes placed_paintings row too
 
-    // Rebuild assignment for the rack this painting was on
-    const assignment = await getAssignment();
-    let freedSpace: { rackName: string; width: number; height: number } | null = null;
-
-    if (assignment && painting.assignedRackName) {
-      freedSpace = { rackName: painting.assignedRackName, width: painting.width, height: painting.height };
-      // Rebuild placement for rack to recalculate x,y
-      const rack = assignment.racks.find((r) => r.name === painting.assignedRackName);
-      if (rack) {
-        const remaining = rack.paintings.filter((p) => p.id !== id) as Painting[];
-        rack.paintings = [];
-        const rebuilt = assignPaintingsToRacks(remaining, [{ ...rack }]);
-        rack.paintings = rebuilt.racks[0]?.paintings ?? [];
-        await setAssignment(assignment);
-      }
-    }
+    // No rebuild — remaining paintings keep their current positions.
+    // ON DELETE CASCADE already removed this painting's placed_paintings row.
+    const freedSpace = painting.assignedRackName
+      ? { rackName: painting.assignedRackName, width: painting.width, height: painting.height }
+      : null;
 
     return Response.json({ ok: true, freedSpace }, { headers: CORS_HEADERS });
   }

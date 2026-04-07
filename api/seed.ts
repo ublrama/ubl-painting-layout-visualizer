@@ -59,7 +59,8 @@ function parsePaintings(csvText: string): Omit<Painting, 'id' | 'assignedRackNam
     const collection = KNOWN_COLLECTIONS.has((row['Collectie'] ?? '').trim())
       ? (row['Collectie'] ?? '').trim()
       : 'Unknown';
-    paintings.push({ signatuur, collection, width, height, depth: isNaN(depth) ? 0 : depth });
+    const predefinedRack = (row['Rek'] ?? '').trim() || null;
+    paintings.push({ signatuur, collection, width, height, depth: isNaN(depth) ? 0 : depth, predefinedRack });
   }
   return paintings;
 }
@@ -183,7 +184,7 @@ export default async function handler(req: Request): Promise<Response> {
       id: uuidv4(),
       assignedRackName: null,
       manuallyPlaced: false,
-      predefinedRack: null,
+      predefinedRack: p.predefinedRack ?? null,
     }));
 
     // Run assignment algorithm

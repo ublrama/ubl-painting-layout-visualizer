@@ -14,6 +14,7 @@ interface RackDetailProps {
   onUnassignPainting?: (paintingId: string) => Promise<void>;
   onAddPaintingToRack?: () => void;
   onPaintingMove?: (paintingId: string, newX: number, newY: number) => Promise<void>;
+  onReorganise?: () => Promise<void>;
 }
 
 export function RackDetail({
@@ -27,9 +28,11 @@ export function RackDetail({
   onUnassignPainting,
   onAddPaintingToRack,
   onPaintingMove,
+  onReorganise,
 }: RackDetailProps) {
   const { rackType } = rack;
   const [editMode, setEditMode] = useState(false);
+  const [reorganising, setReorganising] = useState(false);
 
   return (
     <div className="flex flex-col gap-6">
@@ -49,6 +52,19 @@ export function RackDetail({
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
             >
               + Schilderij toevoegen
+            </button>
+          )}
+          {onReorganise && (
+            <button
+              onClick={async () => {
+                setReorganising(true);
+                try { await onReorganise(); } finally { setReorganising(false); }
+              }}
+              disabled={reorganising}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white border-2 border-gray-300 text-sm font-medium text-gray-700 hover:border-green-500 hover:text-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              title="Herbereken de optimale positionering van alle schilderijen op dit rek"
+            >
+              {reorganising ? '⏳ Bezig…' : '🔄 Optimaliseer rek'}
             </button>
           )}
           {onPaintingMove && (
