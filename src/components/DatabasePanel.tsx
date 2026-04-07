@@ -153,6 +153,7 @@ export function DatabasePanel({ onClose, onSeedComplete }: DatabasePanelProps) {
     { key: 'seed-default', label: 'Start data' },
     { key: 'seed-custom',  label: 'Eigen CSV' },
     { key: 'rack-types',   label: 'Rektypen' },
+    { key: 'export',       label: '📥 Exporteer' },
     { key: 'clear',        label: '🗑️ Wissen' },
   ];
 
@@ -271,6 +272,48 @@ export function DatabasePanel({ onClose, onSeedComplete }: DatabasePanelProps) {
                   </table>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Export */}
+          {tab === 'export' && (
+            <div className="space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2">
+                <h4 className="text-sm font-semibold text-blue-900">📥 Exporteer huidige toewijzing</h4>
+                <p className="text-sm text-blue-800">
+                  Downloadt drie CSV-bestanden die de <strong>huidige staat</strong> vastleggen:
+                  de schilderijentoewijzingen, alle rekken en de rektypen.
+                </p>
+                <p className="text-sm text-blue-800">
+                  De kolom <strong>Rek</strong> in de schilderijen-CSV bevat de huidige rektoewijzing
+                  per schilderij. Je kunt deze drie bestanden daarna opnieuw importeren via
+                  het tabblad <em>Eigen CSV</em> om de toewijzingen te herstellen — zonder
+                  dat je de originele startdata overschrijft.
+                </p>
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                <p className="text-xs text-amber-800">
+                  <strong>Let op:</strong> bij herinstallatie worden de posities op een rek
+                  herberekend door het plaatsingsalgoritme, maar alle rektoewijzingen blijven
+                  intact.
+                </p>
+              </div>
+
+              {exportError && (
+                <div className="rounded-lg px-3 py-2 text-sm bg-red-50 border border-red-200 text-red-800">
+                  {exportError}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handleExport}
+                disabled={exportLoading}
+                className="w-full py-2 px-4 rounded-lg bg-[#0a2060] hover:bg-[#001158] text-white font-semibold text-sm disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              >
+                {exportLoading ? '⏳ Bezig met exporteren…' : '📥 Download CSV-pakket (3 bestanden)'}
+              </button>
             </div>
           )}
 
