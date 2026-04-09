@@ -61,11 +61,11 @@ This ensures deep racks are never filled with shallow paintings, leaving space f
 | State management | SWR for server state, React hooks for local state |
 | Backend | Supabase (PostgreSQL) |
 | Authentication | Clerk (optional) |
-| API | Vercel Serverless Functions (TypeScript) |
+| API | Express (TypeScript) |
+| Hosting | Railway |
 | Bundler | Vite 6 |
 | CSV parsing | PapaParse |
 | Development | Docker / Podman with hot reload |
-| Production | Vercel (serverless) or self-hosted Express |
 
 ---
 
@@ -110,7 +110,7 @@ src/
     ├── clerk.ts                     # Clerk configuration
     └── supabase.ts                  # Supabase client
 
-api/                                 # Vercel Serverless Functions
+api/                                 # API handlers (Express, Railway)
 ├── health.ts                        # GET  /api/health
 ├── paintings.ts                     # GET/POST /api/paintings
 ├── paintings/[id].ts                # GET/PUT/DELETE /api/paintings/:id
@@ -182,21 +182,63 @@ Removing a painting from a rack **does not** automatically reorganise the remain
 
 ---
 
+## Supabase Setup
+
+These steps apply to both local development and all production deployments.
+
+### 1. Create a Supabase project
+
+1. Go to [supabase.com](https://supabase.com) → **New project**
+2. Choose a name, database password, and region
+3. Wait for provisioning to finish (~1–2 minutes)
+
+### 2. Collect your API keys
+
+Open your project → **Settings → API**:
+
+| Key | Where to find it | Used by |
+|---|---|---|
+| **Project URL** | "Project URL" field | Frontend + backend |
+| **anon / public** key | "Project API keys" → `anon public` | Frontend (`VITE_SUPABASE_ANON_KEY`) |
+| **service_role** key | "Project API keys" → `service_role` ⚠️ secret | Backend only (`SUPABASE_SERVICE_KEY`) |
+
+> ⚠️ Never expose the `service_role` key to the browser — it bypasses all RLS policies.
+
+### 3. Run migrations
+
+Open **SQL Editor** in the Supabase dashboard and run the files below in order, or use the CLI (`supabase db push` if the project is linked):
+
+| File | What it does |
+|---|---|
+| `supabase/migrations/001_initial_schema.sql` | Creates all tables |
+| `supabase/migrations/002_indexes.sql` | Adds performance indexes |
+| `supabase/migrations/002_enable_rls.sql` | *(Recommended)* Enables Row-Level Security |
+
+> **RLS note**: `002_enable_rls.sql` restricts direct PostgREST access to authenticated users. The backend always uses the `service_role` key which bypasses RLS, so enabling it has no effect on API behaviour but prevents accidental data exposure.
+
+### 4. Free-tier gotcha
+
+Supabase pauses free projects after 1 week of inactivity. If `/api/health` times out, resume the project from your Supabase dashboard.
+
+---
+
 ## Local Development
 
 ### Prerequisites
 - Node.js 20+, npm 9+
-- Supabase account (free tier)
+- Supabase project (see [Supabase Setup](#supabase-setup) above)
 - Clerk account (optional)
 
 ### 1. Environment variables
 
-Create `.env.local`:
+Copy `.env.example` to `.env.local` and fill in your values:
 
 ```env
-# Supabase (required)
+# Frontend (Vite build-time — must be VITE_ prefixed)
 VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
+VITE_SUPABASE_ANON_KEY=your-anon-public-key
+
+# Backend API (runtime — never exposed to the browser)
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_KEY=your-service-role-key
 
@@ -205,21 +247,14 @@ VITE_CLERK_PUBLISHABLE_KEY=pk_test_...
 CLERK_SECRET_KEY=sk_test_...
 ```
 
-### 2. Database migrations
-
-```bash
-supabase db push
-# or run supabase/migrations/*.sql manually in the Supabase SQL editor
-```
-
-### 3. Run
+### 2. Run
 
 ```bash
 npm install
 npm run dev     # http://localhost:5173
 ```
 
-### 4. Seed demo data
+### 3. Seed demo data
 
 Click **Database** in the app header → **Start data** → **Start data laden**.
 
@@ -244,14 +279,58 @@ The `node_modules` named volume persists dependencies between restarts.
 
 ---
 
-## Deploy to Vercel
+## Deploy to Railway
 
-1. Push to GitHub
-2. **Add New Project** → import repo
-3. Set environment variables (same as `.env.local` above)
-4. **Deploy** — every `git push` to `main` auto-deploys ✅
+Railway runs the self-hosted **Express server** (`server/index.ts`) inside the production Docker image. The static frontend and all API routes are served from a single container on port `3000`.
 
-`vercel.json` configures API routes as serverless functions with 30 s timeout.
+### How it works
+
+```
+Docker (production stage)
+  └─ npm run build:all        # builds dist/ (frontend) + dist-server/ (Express)
+  └─ node dist-server/server/index.js   # serves both on PORT
+```
+
+### Steps
+
+#### 1. Create a Railway project
+
+1. Go to [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo**
+2. Select your repository
+3. Railway auto-detects the `Dockerfile` and uses the `production` stage
+
+#### 2. Set environment variables
+
+In Railway → your service → **Variables**, add **all** of the following:
+
+| Variable | Value | Notes |
+|---|---|---|
+| `VITE_SUPABASE_URL` | `https://your-project.supabase.co` | **Build-time** — baked into the frontend bundle |
+| `VITE_SUPABASE_ANON_KEY` | your anon/public key | **Build-time** — baked into the frontend bundle |
+| `SUPABASE_URL` | `https://your-project.supabase.co` | Runtime — used by Express API handlers |
+| `SUPABASE_SERVICE_KEY` | your service_role key | Runtime — keep secret, never expose publicly |
+| `CLERK_SECRET_KEY` | `sk_test_...` | Optional — only if using Clerk auth |
+
+> The `VITE_*` variables are passed as Docker build args, so they must be set **before** the first deploy (or trigger a redeploy after adding them). `PORT` is set automatically by Railway — do not override it.
+
+#### 3. Configure the build
+
+Railway should automatically pick up the `Dockerfile`. If it doesn't:
+- Go to **Settings → Build** → set **Builder** to `Dockerfile`
+- Set **Dockerfile path** to `Dockerfile`
+
+#### 4. Deploy
+
+Click **Deploy** (or push to your connected branch). Railway will:
+1. Pass `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` as Docker build args
+2. Build the frontend bundle and Express server with `npm run build:all`
+3. Start `node dist-server/server/index.js` on the assigned `PORT`
+
+Once deployed, Railway provides a public URL (e.g. `https://your-app.up.railway.app`).
+
+#### 5. Seed demo data
+
+Open the app URL → **Database** → **Start data** → **Start data laden**.
 
 ---
 
