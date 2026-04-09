@@ -2,6 +2,7 @@
 
 A **full-stack museum rack management system** built with React + TypeScript + Supabase that manages paintings across museum storage racks using a **Maximal Rectangles bin-packing algorithm**. Features secure authentication, real-time database sync, and an interactive visual dashboard.
 
+![img.png](img.png)
 ---
 
 ## Features
