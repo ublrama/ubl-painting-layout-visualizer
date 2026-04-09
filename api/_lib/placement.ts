@@ -195,10 +195,17 @@ export function assignPaintingsToRacks(paintings: Painting[], racks: Rack[]): As
     }
   }
 
+  // ── Phase 2: depth-bracket rule (see frontend file for full explanation) ──────
+  // Each painting is restricted to the LOWEST depth tier (derived from the
+  // rack pool) that still fits its depth.  Shallow paintings never fill deep
+  // racks; deep paintings never spill onto shallow racks.
+  const depthTiers = [...new Set(workRacks.map((r) => r.rackType.maxDepth))].sort((a, b) => a - b);
+
   const sorted = [...free].sort((a, b) => b.width * b.height - a.width * a.height);
 
   for (const painting of sorted) {
-    const canFit  = (r: Rack) => r.rackType.maxDepth >= painting.depth;
+    const minFittingTier = depthTiers.find((tier) => tier >= painting.depth) ?? Infinity;
+    const canFit  = (r: Rack) => r.rackType.maxDepth === minFittingTier;
     const byDepth = (a: Rack, b: Rack) => a.rackType.maxDepth - b.rackType.maxDepth;
 
     const priorityEligible  = workRacks.filter((r) =>  isPriorityRack(r.name) && canFit(r)).sort(byDepth);

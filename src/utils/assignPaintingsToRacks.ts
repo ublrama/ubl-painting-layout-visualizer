@@ -250,10 +250,25 @@ export function assignPaintingsToRacks(paintings: Painting[], racks: Rack[]): As
   }
 
   // ── Phase 2: free paintings, area-descending ─────────────────────────────────
+  //
+  // Depth-bracket rule
+  // ──────────────────
+  // Derive the sorted set of unique maxDepth values from the rack pool
+  // (e.g. [9, 25]).  Each painting is restricted to the LOWEST tier whose
+  // maxDepth still ≥ the painting's own depth.  This prevents shallow
+  // paintings from consuming space on deep racks — keeping those racks free
+  // for paintings that genuinely require the extra depth.
+  //
+  // Example with tiers [9, 25]:
+  //   painting.depth = 3  →  minFittingTier = 9  →  only maxDepth-9 racks
+  //   painting.depth = 12 →  minFittingTier = 25 →  only maxDepth-25 racks
+  const depthTiers = [...new Set(workRacks.map((r) => r.rackType.maxDepth))].sort((a, b) => a - b);
+
   const sorted = [...free].sort((a, b) => b.width * b.height - a.width * a.height);
 
   for (const painting of sorted) {
-    const canFit  = (r: Rack) => r.rackType.maxDepth >= painting.depth;
+    const minFittingTier = depthTiers.find((tier) => tier >= painting.depth) ?? Infinity;
+    const canFit  = (r: Rack) => r.rackType.maxDepth === minFittingTier;
     const byDepth = (a: Rack, b: Rack) => a.rackType.maxDepth - b.rackType.maxDepth;
 
     const priorityEligible  = workRacks.filter((r) =>  isPriorityRack(r.name) && canFit(r)).sort(byDepth);

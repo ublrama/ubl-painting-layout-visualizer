@@ -43,9 +43,12 @@ export function getPlacementFailReason(
     }
   }
 
-  // 2. Depth check — no rack accepts this depth
-  const depthCompatible = racks.filter((r) => r.rackType.maxDepth >= painting.depth);
-  if (depthCompatible.length === 0) {
+  // 2. Depth bracket check — no rack in the painting's minimum fitting tier?
+  // Mirrors the bracket rule used in assignPaintingsToRacks Phase 2.
+  const depthTiers = [...new Set(racks.map((r) => r.rackType.maxDepth))].sort((a, b) => a - b);
+  const minFittingTier = depthTiers.find((tier) => tier >= painting.depth);
+
+  if (minFittingTier === undefined) {
     const maxAvailDepth = Math.max(...racks.map((r) => r.rackType.maxDepth));
     return {
       reason: 'too-deep',
@@ -53,6 +56,9 @@ export function getPlacementFailReason(
       detail: `Schilderij is ${painting.depth} cm diep; het diepste rek accepteert maar ${maxAvailDepth} cm.`,
     };
   }
+
+  // Eligible racks are only those in the minimum fitting tier
+  const depthCompatible = racks.filter((r) => r.rackType.maxDepth === minFittingTier);
 
   // 3. Width check — wider than every depth-compatible rack
   const widthCompatible = depthCompatible.filter(

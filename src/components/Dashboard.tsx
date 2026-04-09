@@ -37,6 +37,7 @@ export function Dashboard({ assignmentResult, onSelectRack, onSwitchToPaintings,
   const [usageFilter,    setUsageFilter]    = useState<UsageFilter>('used');
   const [sortDir,        setSortDir]        = useState<SortDir>('asc');
   const [typeFilter,     setTypeFilter]     = useState<number | null>(null);
+  const [rackSearch,     setRackSearch]     = useState('');
   const [paintingSearch, setPaintingSearch] = useState('');
   const [showAddRack,    setShowAddRack]    = useState(false);
 
@@ -92,19 +93,25 @@ export function Dashboard({ assignmentResult, onSelectRack, onSwitchToPaintings,
       ? usageFiltered
       : usageFiltered.filter((r) => r.rackType.id === typeFilter);
 
-  // 3. Painting search — keep only racks that contain a matching painting
+  // 3. Rack name search
+  const rackQuery = rackSearch.trim().toLowerCase();
+  const rackFiltered = rackQuery
+    ? typeFiltered.filter((r) => r.name.toLowerCase().includes(rackQuery))
+    : typeFiltered;
+
+  // 4. Painting search — keep only racks that contain a matching painting
   const searchQuery = paintingSearch.trim().toLowerCase();
   const searchFiltered = searchQuery
-    ? typeFiltered.filter((r) =>
+    ? rackFiltered.filter((r) =>
         r.paintings.some(
           (p) =>
             p.signatuur.toLowerCase().includes(searchQuery) ||
             p.collection.toLowerCase().includes(searchQuery),
         ),
       )
-    : typeFiltered;
+    : rackFiltered;
 
-  // 4. Sort
+  // 5. Sort
   const displayRacks = [...searchFiltered].sort((a, b) => compareRacks(a, b, sortDir));
 
   const usageOptions: { key: UsageFilter; label: string; count: number }[] = [
@@ -207,6 +214,27 @@ export function Dashboard({ assignmentResult, onSelectRack, onSwitchToPaintings,
 
         {/* Divider */}
         <div className="h-5 w-px bg-gray-200" />
+
+        {/* Rack search */}
+        <div className="flex items-center gap-2 flex-1 min-w-48">
+          <input
+            type="search"
+            value={rackSearch}
+            onChange={(e) => setRackSearch(e.target.value)}
+            placeholder="Zoek op reknaam…"
+            className="w-full text-xs border-2 border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 hover:border-blue-400 focus:border-blue-500 focus:outline-none transition-colors"
+          />
+          {rackSearch && (
+            <button
+              type="button"
+              onClick={() => setRackSearch('')}
+              className="text-xs text-gray-400 hover:text-gray-700 flex-shrink-0"
+              title="Wis zoekopdracht"
+            >
+              ✕
+            </button>
+          )}
+        </div>
 
         {/* Painting search */}
         <div className="flex items-center gap-2 flex-1 min-w-48">
