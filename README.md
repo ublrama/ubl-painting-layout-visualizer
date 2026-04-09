@@ -15,24 +15,40 @@ A **full-stack museum rack management system** built with React + TypeScript + S
 
 ### Painting Management
 - **CSV bulk import** — seed database with paintings, racks, and rack types from CSV files
+- **Predefined rack assignments** — paintings with a value in the `Rek` column are placed on that rack first (Phase 1), before any auto-assignment runs
 - **Manual painting entry** — add individual paintings with dimensions and optional rack assignment
 - **Search & filter** — find paintings by signatuur, dimensions, or assignment status
-- **Unassign with confirmation** — custom modal dialog with loading state, 30 s timeout, and retry
+- **Unassign without reorganise** — removing a painting from a rack leaves all remaining paintings exactly where they are
+- **Manual rack optimisation** — "🔄 Optimaliseer rek" button in the rack detail view re-runs bin-packing for just that rack
 - **Delete with safety** — shows fill suggestions for freed space before deletion
 
 ### Rack Management
 - **Rack types** — define reusable rack configurations (width, height, max depth)
 - **Add/remove racks** — create racks from rack types or delete existing ones
+- **Rack name search** — filter the dashboard by rack name in real time
 - **Visual rack preview** — see exactly how paintings are arranged on each rack
 - **Fill suggestions** — smart recommendations for paintings that fit freed space
 - **Force placement** — manually assign paintings to specific racks
+
+### Depth-Bracket Assignment
+Paintings are restricted to the **lowest depth tier** that can accommodate them:
+
+| Painting depth | Eligible racks (example tiers: 9 cm, 25 cm) |
+|---|---|
+| 0 – 9 cm | Only `maxDepth = 9` racks |
+| 10 – 25 cm | Only `maxDepth = 25` racks |
+
+This ensures deep racks are never filled with shallow paintings, leaving space for paintings that genuinely need the extra depth. Predefined rack assignments (`Rek` column) bypass this rule.
+
+### Export & Re-import
+- **Export CSV package** — downloads three CSV files (`schilderijen`, `rekken`, `rektypen`) reflecting the **current state** of all rack assignments. The paintings CSV has the `Rek` column pre-filled with each painting's current rack, making the export directly re-importable as a new starting set via the *Eigen CSV* seed tab.
 
 ### User Experience
 - **Zoom slider** — adjust render scale (1–4 px/cm) in detail view
 - **Responsive tabs** — switch between racks view and paintings list
 - **Loading indicators** — spinners and progress feedback for all async operations
 - **Error recovery** — timeout handling (30 s) with retry capability
-- **Database panel** — manage and seed database with demo data
+- **Database panel** — manage database, seed data, export state, and maintain rack types
 
 ---
 
@@ -64,17 +80,17 @@ src/
 ├── components/
 │   ├── Header.tsx                   # App header with database button
 │   ├── Sidebar.tsx                  # Summary stats + zoom control
-│   ├── Dashboard.tsx                # Rack cards grid
+│   ├── Dashboard.tsx                # Rack cards grid with name/painting/type filters
 │   ├── RackCard.tsx                 # Single rack card with preview
-│   ├── RackDetail.tsx               # Full rack view with painting list
+│   ├── RackDetail.tsx               # Full rack view + optimise button + painting list
 │   ├── RackCanvas.tsx               # Rack rendering canvas
 │   ├── PaintingRect.tsx             # Painting rectangle + tooltip
 │   ├── PaintingsList.tsx            # Searchable paintings table
-│   ├── DatabasePanel.tsx            # Database management & CSV seeding
+│   ├── DatabasePanel.tsx            # Seed, export, rack types, clear data
 │   ├── AddPaintingModal.tsx         # Add new painting form
 │   ├── AddRackModal.tsx             # Add new rack form
 │   ├── AddRackTypeModal.tsx         # Add new rack type form
-│   ├── UnassignPaintingDialog.tsx   # Unassign confirmation with loading states
+│   ├── UnassignPaintingDialog.tsx   # Unassign confirmation (positions preserved)
 │   ├── RemovePaintingDialog.tsx     # Delete confirmation with fill suggestions
 │   ├── AuthGuard.tsx                # Authentication wrapper
 │   ├── Tooltip.tsx / Legend.tsx / SummaryPanel.tsx / ZoomSlider.tsx
@@ -87,7 +103,7 @@ src/
 ├── utils/
 │   ├── assignPaintingsToRacks.ts    # Maximal Rectangles algorithm (frontend)
 │   ├── getPlacementFailReason.ts    # Why a painting couldn't be placed
-│   ├── parsePaintingsCsv.ts
+│   ├── parsePaintingsCsv.ts         # Parses paintings CSV incl. Rek column
 │   ├── parseRacksCsv.ts
 │   └── parseRackTypesCsv.ts
 └── lib/
@@ -95,15 +111,17 @@ src/
     └── supabase.ts                  # Supabase client
 
 api/                                 # Vercel Serverless Functions
-├── health.ts                        # GET /api/health — DB health check
+├── health.ts                        # GET  /api/health
 ├── paintings.ts                     # GET/POST /api/paintings
 ├── paintings/[id].ts                # GET/PUT/DELETE /api/paintings/:id
 ├── racks.ts                         # GET/POST/DELETE /api/racks
-├── rack-types.ts                    # GET/POST /api/rack-types
+├── rack-types.ts                    # GET/POST/DELETE /api/rack-types
 ├── assignment.ts                    # GET/POST /api/assignment
 ├── suggest-rack.ts                  # GET /api/suggest-rack
 ├── fill-suggestions.ts              # GET /api/fill-suggestions
-├── clear-all.ts                     # DELETE /api/clear-all
+├── reorganise-rack.ts               # POST /api/reorganise-rack
+├── export.ts                        # GET  /api/export
+├── clear-all.ts                     # POST /api/clear-all
 ├── seed.ts                          # POST /api/seed
 └── _lib/
     ├── placement.ts                 # Maximal Rectangles algorithm (API copy)
@@ -126,31 +144,24 @@ The application uses a **Maximal Rectangles (MAXRECTS)** algorithm with **Best S
 1. **Free rectangles** — the rack starts as a single free rectangle. After each placement, the used area is subtracted and the overlapping free rects are split into up to 4 axis-aligned pieces.
 2. **Dominated rect pruning** — any free rect fully contained within another is removed, keeping the list minimal and correct.
 3. **Best Short Side Fit** — for each painting, the free rect that minimises the shorter leftover dimension is chosen (tightest fit).
-4. **Area-descending sort** — in bulk assignment, largest paintings are placed first, which leaves smaller gaps for smaller paintings.
-5. **Two-phase assignment** — paintings with a predefined rack go there first; remaining paintings use priority racks (best-fit depth), then all other racks.
-
-### Example (user scenario)
-
-Rack **280 × 242 cm**, paintings **101×206**, **66×87**, **66×87**:
-
-```
-Old algorithm (shelf-based):
-  Row 1: [101×206] [66×87] [66×87]
-  → 119 cm tall space below the 66×87 paintings is WASTED
-
-New algorithm (MAXRECTS):
-  [101×206] [66×87] [66×87]   ← top area
-             [fits here  ]     ← any painting ≤ 173×149 cm fills the gap below
-```
+4. **Area-descending sort** — in bulk assignment, largest paintings are placed first, leaving smaller gaps for smaller paintings.
+5. **Two-phase assignment**:
+   - **Phase 1 – Predefined racks**: paintings with a value in the `Rek` CSV column are placed on that exact rack first, regardless of depth tier or priority.
+   - **Phase 2 – Depth-bracket auto-assignment**: remaining paintings are sorted by area (largest first). Each painting is restricted to the lowest depth tier (derived from all available rack `maxDepth` values) that still accommodates its depth — preventing shallow paintings from consuming space on deep racks. Within the eligible tier, priority racks are tried first.
 
 ### Placement Constraints
 
 - **Width**: `painting.width + 2 × MARGIN ≤ rack.width`
 - **Height**: `painting.height + 2 × MARGIN ≤ rack.height`
-- **Depth**: `painting.depth ≤ rack.maxDepth`
+- **Depth (exact tier)**: painting is placed only on racks in the minimum fitting depth tier — e.g., a 3 cm deep painting goes to `maxDepth=9` racks only, never to `maxDepth=25` racks
 - **MARGIN**: 2 cm on all sides (between paintings and between paintings and walls)
+- **Predefined override**: a `Rek` value in the CSV bypasses the depth-bracket rule
 
-Algorithm lives in `src/utils/assignPaintingsToRacks.ts` and is mirrored in `api/_lib/placement.ts`.
+> The algorithm lives in `src/utils/assignPaintingsToRacks.ts` and is mirrored verbatim in `api/_lib/placement.ts`. Keep both files in sync when making changes.
+
+### Manual Optimisation
+
+Removing a painting from a rack **does not** automatically reorganise the remaining paintings — their positions are preserved. To compact the rack and re-run bin-packing, use the **🔄 Optimaliseer rek** button in the rack detail view (`POST /api/reorganise-rack`).
 
 ---
 
@@ -162,6 +173,7 @@ Algorithm lives in `src/utils/assignPaintingsToRacks.ts` and is mirrored in `api
 - ✅ 30-second timeout — painting stays assigned on timeout
 - ✅ Error message + retry button
 - ✅ Auto-closes on success
+- ✅ Remaining paintings keep their exact positions (no reorganisation)
 
 ### Delete Painting Dialog (`RemovePaintingDialog.tsx`)
 - ✅ All of the above
@@ -209,7 +221,7 @@ npm run dev     # http://localhost:5173
 
 ### 4. Seed demo data
 
-Click **Database** in the app header → **Load Demo Data**.
+Click **Database** in the app header → **Start data** → **Start data laden**.
 
 ---
 
@@ -251,45 +263,66 @@ The `node_modules` named volume persists dependencies between restarts.
 | GET | `/api/paintings` | — | List paintings (paginated) |
 | POST | `/api/paintings` | ✅ | Create painting |
 | GET | `/api/paintings/:id` | — | Get single painting |
-| PUT | `/api/paintings/:id` | ✅ | Update / reassign painting |
-| DELETE | `/api/paintings/:id` | ✅ | Delete painting |
+| PUT | `/api/paintings/:id` | ✅ | Update / reassign painting (positions preserved) |
+| DELETE | `/api/paintings/:id` | ✅ | Delete painting (cascade removes from placement) |
 | GET | `/api/racks` | — | List racks |
 | POST | `/api/racks` | ✅ | Create rack |
 | DELETE | `/api/racks` | ✅ | Delete rack |
 | GET | `/api/rack-types` | — | List rack types |
-| POST | `/api/rack-types` | ✅ | Create rack type |
+| POST | `/api/rack-types` | ✅ | Create / update rack type |
+| DELETE | `/api/rack-types` | ✅ | Delete rack type |
 | GET | `/api/assignment` | — | Current placement result |
 | POST | `/api/assignment` | ✅ | Save assignment |
 | GET | `/api/suggest-rack` | — | Rack suggestions for a painting |
 | GET | `/api/fill-suggestions` | — | Paintings that fit freed space |
-| POST | `/api/seed` | ✅ | Bulk import from CSV |
-| DELETE | `/api/clear-all` | ✅ | Wipe all data |
+| POST | `/api/reorganise-rack` | ✅ | Re-run bin-packing for one rack |
+| GET | `/api/export` | ✅ | Export current state as 3 CSV strings |
+| POST | `/api/seed` | ✅ | Bulk import from CSV (multipart or default demo) |
+| POST | `/api/clear-all` | ✅ | Wipe all data |
 
 ---
 
 ## CSV Format
 
-### Paintings
-```csv
-signatuur;afmetingen
-BWB 853;61cm x 61,5cm
-AHM-1989-81;85cm x 55cm
-```
-Width = first number, Height = second. Dutch decimal commas handled automatically.
+All files use **semicolon (`;`)** as delimiter and **Dutch decimal notation** (comma as decimal separator, e.g. `86,5`).
 
-### Rack Types
+### Paintings (`Collectie;signatuur;Hoogte (cm);Breedte (cm);Diepte (cm);Rek`)
+
 ```csv
-id;height;width;max_depth
-1;240;375;50
+Collectie;signatuur;Hoogte (cm);Breedte (cm);Diepte (cm);Rek
+UBL;Icones 67;86,5;75,5;3;
+UBL;COLLBN 053-51;60;45;4;Pos. 5-1a
+AHM-1990-236;AHM-1990-236;80;60;2;Pos. 3-22a
 ```
 
-### Racks
+- `Rek` (optional) — forces the painting onto that rack in Phase 1, bypassing auto-assignment
+- Depth defaults to `0` if the column is empty
+
+### Rack Types (`Type schilderijenrekken;Hoogte (cm);Breedte (cm);Maximale diepte (cm)`)
+
 ```csv
-name;rack_type_id
-Rek A;1
+Type schilderijenrekken;Hoogte (cm);Breedte (cm);Maximale diepte (cm)
+1;242;395;9
+5;240;375;25
+```
+
+### Racks (`Nummer;Type`)
+
+```csv
+Nummer;Type
+Pos. 5-1a;5
+Pos. 1-2a;1
 ```
 
 Demo files: `public/demo-paintings.csv`, `public/demo-rack-types.csv`, `public/demo-racks.csv`.
+
+### Export & Re-import Workflow
+
+1. Open **Database** panel → **📥 Exporteer** tab → **Download CSV-pakket**
+2. Three files are downloaded: `schilderijen-export-YYYY-MM-DD.csv`, `rekken-export-…`, `rektypen-export-…`
+3. The paintings file has the `Rek` column pre-filled with each painting's **current rack**
+4. To restore: open **Eigen CSV** tab → upload the three exported files → **Bestanden laden**
+5. Rack assignments are preserved via Phase 1; positions are recalculated by bin-packing
 
 ---
 
@@ -298,10 +331,12 @@ Demo files: `public/demo-paintings.csv`, `public/demo-rack-types.csv`, `public/d
 | Symptom | Fix |
 |---|---|
 | `/api/*` returns JS source instead of JSON | Add missing route to `apiRouterPlugin()` in `vite.config.ts` |
-| `paintings.findIndex is not a function` | `getPaintings()` returns `{ paintings, total }` — destructure it |
+| Painting returns 404 on PUT/DELETE | Fixed — `getPaintingById(id)` is used (no 100-row limit). Ensure DB is seeded. |
 | Docker: module not found | `podman compose down -v && podman compose build --no-cache` |
 | Supabase timeout on `/api/health` | Project may be paused (free tier). Resume it in the Supabase dashboard |
 | `SUPABASE_SERVICE_KEY` errors | Use the **service_role** key, not the anon key |
+| Deep paintings can't be placed | Ensure painting `depth > 0` and a rack with sufficient `maxDepth` exists. Shallow paintings (depth ≤ 9 cm) are blocked from deep racks by the depth-bracket rule. |
+| Export downloads empty files | Requires authentication — ensure you are logged in before exporting |
 
 ---
 
@@ -309,6 +344,7 @@ Demo files: `public/demo-paintings.csv`, `public/demo-rack-types.csv`, `public/d
 
 1. Fork → feature branch → PR
 2. Keep `src/utils/assignPaintingsToRacks.ts` and `api/_lib/placement.ts` in sync — they contain the same algorithm.
+3. When adding a new API route, register it in `apiRouterPlugin()` in `vite.config.ts` for local dev.
 
 ---
 
